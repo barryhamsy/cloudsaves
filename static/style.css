@@ -1,0 +1,33 @@
+*{box-sizing:border-box} :root{--bg:#0b1620;--fg:#e9f1f7;--muted:#9fb3c8;--card:#112233;--accent:#79c0ff;--ok:#8bd17c;--warn:#ffd166}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+header,footer{position:sticky;background:rgba(0,0,0,.2);backdrop-filter:blur(6px);padding:12px 16px;display:flex;align-items:center;gap:12px}
+header{top:0;border-bottom:1px solid #1e3a5a}
+footer{bottom:0;border-top:1px solid #1e3a5a;justify-content:space-between}
+h1{margin:0;font-size:20px}
+main{padding:16px;max-width:1200px;margin:0 auto 80px}
+.card{background:var(--card);border:1px solid #1e3a5a;border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 6px 22px rgba(0,0,0,.2)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.row{display:flex;gap:8px;align-items:center;margin:8px 0}
+label{display:block;margin-bottom:6px;color:var(--muted)}
+input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #2b486b;background:#0b1827;color:var(--fg)}
+button{padding:10px 14px;border:none;border-radius:12px;background:#17324e;color:#fff;cursor:pointer;font-weight:600}
+button:hover{filter:brightness(1.1)}
+.muted{color:var(--muted)}
+#files{max-height:260px;overflow:auto;border:1px solid #1e3a5a;border-radius:10px;padding:8px;margin-top:8px;background:#0b1827}
+.file-row{display:grid;grid-template-columns:1fr 120px 280px;gap:8px;padding:6px 4px;border-bottom:1px dashed #25476f}
+.file-row:last-child{border-bottom:none}
+.log{background:#0a1320;border:1px solid #1e3a5a;border-radius:10px;padding:10px;height:220px;overflow:auto}
+
+#status-dot{width:10px;height:10px;border-radius:50%;background:#c33;margin-left:auto}
+#status-dot.ok{background:var(--ok)}
+
+#branch-list{border:1px solid #1e3a5a;border-radius:12px;background:#0b1827;max-height:260px;overflow:auto;padding:6px}
+.branch-row{display:grid;grid-template-columns:28px 240px 1fr 220px;gap:8px;align-items:center;padding:6px;border-bottom:1px dashed #25476f}
+.branch-row:last-child{border-bottom:none}
+.branch-head{font-weight:700;opacity:.8}
+.branch-updated{font-family:monospace}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#0e2238;color:#fff;border:1px solid #274d7a;font-size:12px}
+
+progress{appearance:none}
+progress::-webkit-progress-bar{background:#0b1827;border-radius:6px;border:1px solid #1e3a5a}
+progress::-webkit-progress-value{background:linear-gradient(90deg,var(--accent),#7ee787);border-radius:6px}
