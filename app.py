@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GitHub Cloud Backup App (v4.9)
-- Branch list shows **last updated** timestamp for each branch (server computes from latest commit).
-- Branch list with **checkboxes** + **SYNC ALL CHECKED** downloads multiple branches in one click.
-- Upload endpoint streams **per-file progress** (newline-delimited JSON).
-- "Select Local Folder" never auto-fills; downloads still honor .ghcb.json → local map → session pick.
-- Clean/orphan branch creation remains default.
+GitHub Cloud Backup App — NO KEYRING EDITION
+- Stores the GitHub token in ~/.github_cloud_backup_app.json (plaintext).
+- Compatible with PyInstaller one-file builds (uses sys._MEIPASS for templates/static).
+- All features retained: clean/orphan branch creation, multi-branch sync, last-updated column,
+  streaming per-file upload progress (NDJSON), .ghcb.json branch → folder mapping.
 """
 import os
-import io
 import sys
+import io
 import json
 import time
 import base64
@@ -23,16 +22,34 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Iterable
 
 import requests
-import keyring
 from flask import Flask, request, jsonify, render_template, Response, stream_with_context
-
-import webview
 
 APP_NAME = "GitHubCloudBackupApp"
 DEFAULT_BRANCH = "main"
 PERSIST_PATH = Path.home() / ".github_cloud_backup_app.json"
 META_FILENAME = ".ghcb.json"
 EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+def resource_path(*parts):
+    """
+    Works with PyInstaller/Nuitka onefile and normal runs.
+    - If a bundle temp dir exists (PyInstaller-style), use it.
+    - Else, use the executable folder (installed by Inno) or script dir.
+    """
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)   # set by PyInstaller; sometimes also by others
+    if meipass:
+        candidates.append(Path(meipass))
+    if getattr(sys, "frozen", False):          # onefile (Nuitka or PyInstaller)
+        candidates.append(Path(sys.executable).parent)
+    candidates.append(Path(__file__).parent)   # dev run
+
+    for base in candidates:
+        p = base.joinpath(*parts)
+        if p.exists():
+            return str(p)
+    # fallback to the exe folder
+    return str((Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent).joinpath(*parts))
 
 # ------------------- Persistence -------------------
 
@@ -50,9 +67,12 @@ def save_persisted_state(data: Dict):
         with open(PERSIST_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
     except Exception:
-        alt = Path(__file__).parent / "app_state.json"
-        with open(alt, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        try:
+            alt = Path(__file__).parent / "app_state.json"
+            with open(alt, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except Exception:
+            pass
 
 def get_folder_map(persist: Dict) -> Dict[str, str]:
     return persist.get("folders_map", {})
@@ -74,16 +94,24 @@ def machine_id() -> str:
 def machine_name() -> str:
     return platform.node()
 
-# ------------------- GitHub helpers -------------------
+# ------------------- Token (NO KEYRING) -------------------
+
+_persist = load_persisted_state()
 
 def get_token() -> Optional[str]:
-    token = keyring.get_password(APP_NAME, "github_token")
-    if token:
-        return token
-    return os.environ.get("GITHUB_TOKEN")
+    # Prefer env var if set
+    tok = os.environ.get("GITHUB_TOKEN")
+    if tok:
+        return tok.strip()
+    # Else read from persisted JSON
+    return _persist.get("token")
 
 def set_token(token: str):
-    keyring.set_password(APP_NAME, "github_token", token.strip())
+    if token:
+        _persist["token"] = token.strip()
+        save_persisted_state(_persist)
+
+# ------------------- GitHub helpers -------------------
 
 def sha1_file(path: Path) -> str:
     h = hashlib.sha1()
@@ -147,17 +175,17 @@ def github_put_file(owner: str, repo: str, path: str, branch: str, token: str, c
     data["_status_code"] = r.status_code
     return data
 
-def github_branch_exists(owner: str, repo: str, branch: str, token: str) -> bool:
-    url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}"
-    r = requests.get(url, headers=github_headers(token))
-    return r.status_code == 200
-
 def github_branch_sha(owner: str, repo: str, branch: str, token: str) -> Optional[str]:
     ref_url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}"
     r = requests.get(ref_url, headers=github_headers(token))
     if r.status_code != 200:
         return None
     return r.json().get("object", {}).get("sha")
+
+def github_branch_exists(owner: str, repo: str, branch: str, token: str) -> bool:
+    url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}"
+    r = requests.get(url, headers=github_headers(token))
+    return r.status_code == 200
 
 def github_tree(owner: str, repo: str, branch: str, token: str) -> Dict:
     sha = github_branch_sha(owner, repo, branch, token)
@@ -273,7 +301,6 @@ def pick_mapped_folder(meta: Optional[Dict]) -> Optional[str]:
     return None
 
 def github_branch_last_update(owner: str, repo: str, branch: str, token: str) -> Optional[str]:
-    """Return ISO timestamp of latest commit on branch (committer date)."""
     url = f"https://api.github.com/repos/{owner}/{repo}/commits"
     r = requests.get(url, headers=github_headers(token), params={"sha": branch, "per_page": 1})
     if r.status_code != 200:
@@ -282,18 +309,15 @@ def github_branch_last_update(owner: str, repo: str, branch: str, token: str) ->
     if not isinstance(arr, list) or not arr:
         return None
     commit = arr[0].get("commit", {})
-    # Prefer committer date; fallback to author date
     date = (commit.get("committer") or {}).get("date") or (commit.get("author") or {}).get("date")
     return date
 
 # ------------------- Flask App -------------------
 
-app = Flask(__name__, static_folder="static", template_folder="templates")
-
-_persist = load_persisted_state()
+app = Flask(__name__, static_folder=resource_path("static"), template_folder=resource_path("templates"))
 
 STATE = {
-    "selected_folder": None,  # session-only; NEVER auto-filled from mappings
+    "selected_folder": None,  # session-only
     "owner": _persist.get("owner", ""),
     "repo": _persist.get("repo", ""),
     "branch": _persist.get("branch", DEFAULT_BRANCH),
@@ -316,9 +340,9 @@ def api_config():
         if STATE["owner"] and STATE["repo"] and STATE["branch"]:
             mapped = lookup_folder(_persist, STATE["owner"], STATE["repo"], STATE["branch"])
             if not mapped:
-                token = get_token()
-                if token:
-                    meta = github_get_json_file(STATE["owner"], STATE["repo"], META_FILENAME, STATE["branch"], token)
+                tok = get_token()
+                if tok:
+                    meta = github_get_json_file(STATE["owner"], STATE["repo"], META_FILENAME, STATE["branch"], tok)
                     mapped = pick_mapped_folder(meta)
         return jsonify({
             "owner": STATE["owner"],
@@ -332,7 +356,7 @@ def api_config():
     STATE["owner"] = data.get("owner", "").strip()
     STATE["repo"] = data.get("repo", "").strip()
     STATE["branch"] = data.get("branch", DEFAULT_BRANCH).strip() or DEFAULT_BRANCH
-    token = data.get("token", "").strip()
+    token = (data.get("token") or "").strip()
     if token:
         set_token(token)
     persist_now()
@@ -352,7 +376,6 @@ def api_branches():
         return jsonify({"error": msg}), 400
     default_branch = (repo_obj or {}).get("default_branch")
 
-    # list branches
     names = []
     page = 1
     while True:
@@ -389,22 +412,14 @@ def api_create_branch():
     if not (owner and repo and new_branch):
         return jsonify({"error": "Missing owner/repo or new branch name"}), 400
 
-    # If ref already exists, behave idempotently
-    try:
-        if github_branch_exists(owner, repo, new_branch, token):
-            STATE["branch"] = new_branch
-            persist_now()
-            return jsonify({"status": "exists", "branch": new_branch, "base": "clean"})
-    except Exception:
-        pass
+    # idempotent: succeed if already exists
+    if github_branch_exists(owner, repo, new_branch, token):
+        STATE["branch"] = new_branch
+        persist_now()
+        return jsonify({"status": "exists", "branch": new_branch, "base": "clean"})
 
     ok, msg = create_clean_branch(owner, repo, new_branch, token)
     if not ok:
-        # If GitHub returns ref exists concurrently, also return exists
-        if "exists" in msg.lower():
-            STATE["branch"] = new_branch
-            persist_now()
-            return jsonify({"status": "exists", "branch": new_branch, "base": "clean"})
         return jsonify({"error": msg}), 400
 
     STATE["branch"] = new_branch
@@ -475,21 +490,15 @@ def api_download():
     repo = STATE["repo"]
     branch = STATE["branch"]
 
-    # 1) Repo .ghcb.json
     base = None
     meta = github_get_json_file(owner, repo, META_FILENAME, branch, token)
     mapped = pick_mapped_folder(meta)
     if mapped:
         base = mapped
-
-    # 2) Local persisted branch map
     if not base:
         base = lookup_folder(_persist, owner, repo, branch)
-
-    # 3) Current session selection (user-picked)
     if not base and STATE["selected_folder"]:
         base = STATE["selected_folder"]
-
     if not (owner and repo and base):
         return jsonify({"error": "Missing owner/repo or resolved folder"}), 400
 
@@ -568,30 +577,37 @@ def api_sync_multi():
     persist_now()
     return jsonify(results)
 
-# ------------------- PyWebView API -------------------
+# ------------------- PyWebView glue -------------------
 
-class JSBridge:
-    def select_folder(self):
-        win = webview.windows[0]
-        result = win.create_file_dialog(webview.FOLDER_DIALOG)
-        if result and len(result) > 0:
-            STATE["selected_folder"] = result[0]
-            if STATE["owner"] and STATE["repo"] and STATE["branch"]:
-                set_folder_map(_persist, STATE["owner"], STATE["repo"], STATE["branch"], STATE["selected_folder"])
-            return {"selected_folder": STATE["selected_folder"]}
-        return {"selected_folder": None}
+try:
+    import webview
 
-def start_server():
-    app.run(host="127.0.0.1", port=5555, debug=False)
+    class JSBridge:
+        def select_folder(self):
+            win = webview.windows[0]
+            result = win.create_file_dialog(webview.FOLDER_DIALOG)
+            if result and len(result) > 0:
+                STATE["selected_folder"] = result[0]
+                if STATE["owner"] and STATE["repo"] and STATE["branch"]:
+                    set_folder_map(_persist, STATE["owner"], STATE["repo"], STATE["branch"], STATE["selected_folder"])
+                return {"selected_folder": STATE["selected_folder"]}
+            return {"selected_folder": None}
 
-if __name__ == "__main__":
-    t = threading.Thread(target=start_server, daemon=True)
-    t.start()
-    window = webview.create_window(
-        "Steam Game Cloud Saves Backup - By BihiBihi",
-        "http://127.0.0.1:5555",
-        width=1200,
-        height=780,
-        js_api=JSBridge()
-    )
-    webview.start(debug=False)
+    def start_server():
+        app.run(host="127.0.0.1", port=5555, debug=False)
+
+    if __name__ == "__main__":
+        t = threading.Thread(target=start_server, daemon=True)
+        t.start()
+        window = webview.create_window(
+            "GitHub Cloud Backup",
+            "http://127.0.0.1:5555",
+            width=1200,
+            height=780,
+            js_api=JSBridge()
+        )
+        webview.start(debug=False)
+except Exception:
+    # Fallback to plain Flask if pywebview not present
+    if __name__ == "__main__":
+        app.run(host="127.0.0.1", port=5555, debug=False)
