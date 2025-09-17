@@ -12,85 +12,117 @@
       <div id="status-dot" title="Disconnected"></div>
     </header>
 
-    <main>
-      <section class="card">
-        <h2>1) Configure GitHub</h2>
-        <div class="grid">
-          <div>
-            <label>Owner / Org</label>
-            <input id="owner" placeholder="your-github-username-or-org" />
-          </div>
-          <div>
-            <label>Repository</label>
-            <input id="repo" placeholder="repo-name (must already exist)" />
-          </div>
-          <div>
-            <label>Current Cloud Backup Folder Selected</label>
-            <select id="branch-dd"></select>
-            <input id="branch" value="main" style="display:none" />
-          </div>
-        </div>
 
-        <div class="row">
-          <button id="load-branches">Reload Game List</button>
-          <span id="branch-count" class="muted"></span>
-        </div>
+<main>
+  <section class="card">
+    <h2>Step 1 — Configure GitHub</h2>
+    <p class="muted">Enter your GitHub owner/org, repository, and token. Save to continue.</p>
+    <div class="grid">
+      <div>
+        <label>Owner / Org</label>
+        <input id="owner" placeholder="your-github-username-or-org" />
+      </div>
+      <div>
+        <label>Repository</label>
+        <input id="repo" placeholder="repo-name (must already exist)" />
+      </div>
+      <div>
+        <label>Current Backup Folder</label>
+        <select id="branch-dd"></select>
+        <input id="branch" value="main" style="display:none" />
+      </div>
+    </div>
 
-        <div id="branch-list" class="branch-list">
-          <!-- filled by JS -->
-        </div>
-
-        <div class="row">
-          <button id="sync-all">SYNC ALL GAME (CHECKBOX)</button>
-        </div>
-
-        <div class="grid">
-          <div>
-            <label>New Backup Name (Game Name)</label>
-            <input id="new-branch-name" placeholder="Game Name (e.g Cyberpunk2077) Make Sure no Space" />
-          </div>
-          <div style="display:flex;align-items:flex-end">
-            <button id="create-branch">Create Cloud Backup Folder</button>
-          </div>
-        </div>
-
-        <div class="grid">
-          <div>
-            <label>GitHub Token <span class="muted">(only needed once)</span></label>
-            <input id="token" type="password" placeholder="ghp_..." />
-          </div>
-        </div>
+    <div class="grid" style="margin-top:8px">
+      <div>
+        <label>GitHub Token <span class="muted">(only needed once)</span></label>
+        <input id="token" type="password" placeholder="ghp_..." />
+      </div>
+      <div style="display:flex;align-items:flex-end">
         <button id="save-config">Save</button>
-        <span id="config-status" class="muted"></span>
-      </section>
+        <span id="config-status" class="muted" style="margin-left:8px"></span>
+      </div>
+    </div>
 
-      <section class="card">
-        <h2>2) Select Local Folder To Be Backup</h2>
-        <div class="row">
-          <input id="selected-folder" readonly placeholder="(empty — pick a folder to upload)" />
-          <button id="btn-select">Browse…</button>
-        </div>
-        <div class="row">
-          <button id="btn-scan">Scan</button>
-          <span id="scan-count" class="muted"></span>
-          <span id="mapped-folder-tip" class="muted" style="margin-left:auto"></span>
-        </div>
-        <div id="files"></div>
-      </section>
+    <div class="row" style="margin-top:8px">
+      <div id="setup-checklist" class="muted">
+        <strong>Setup checklist:</strong>
+        <span id="check-token">Token: —</span> ·
+        <span id="check-repo">Repo access: —</span> ·
+        <span id="check-branch">List Loaded: —</span> ·
+        <span id="check-mapping">Directory Mapping: —</span>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <button id="load-branches" title="Reload branches from GitHub">Reload List</button>
+        <span id="branch-count" class="muted"></span>
+      </div>
+    </div>
+  </section>
 
-      <section class="card">
-        <h2>3) Sync</h2>
-        <div class="row">
-          <button id="btn-upload">Upload to Current Cloud Folder (See Current Game)</button>
-          <button id="btn-download">Download Current Cloud Folder (See Current Game)</button>
-        </div>
-        <progress id="progress" value="0" max="100" style="width:100%;height:10px;"></progress>
-        <pre id="log" class="log"></pre>
-      </section>
-    </main>
+
+  <section class="card">
+    <h2>Step 1b — Create New Backup Cloud</h2>
+    <div class="grid" style="margin:8px 0">
+      <div>
+        <label>New Backup Name (NO SPACE AND MUST BE MORE THAN 8 LETTERS)</label>
+        <input id="new-branch-name" placeholder="e.g CyberPunk2077-Saves" />
+      </div>
+      <div style="display:flex;align-items:flex-end">
+        <button id="create-branch">Create New Backup Cloud</button>
+        <button id="delete-branch" style="margin-left:8px">Delete Save Data</button>
+
+      </div>
+    </div>
+  </section>
+
+
+  <section class="card">
+    <h2>Step 2 — Choose Game Save Data Folder</h2>
+    <p class="muted">You can browse to a local folder, or rely on the mapped folder in <code>.ghcb.json</code>.</p>
+    <div class="row">
+      <input id="selected-folder" readonly placeholder="(empty — pick a folder to upload)" />
+      <button id="btn-select">Browse…</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span id="mapped-folder-tip" class="muted"></span>
+      <span style="margin-left:auto">
+        <button id="btn-scan" title="Scan the resolved folder for files">Scan</button>
+        <span id="scan-count" class="muted"></span>
+      </span>
+    </div>
+
+    <div class="row" style="margin-top:8px">
+      <button id="btn-upload" title="Upload from the 'Selected Folder' textbox">Upload (Selected Folder)</button>
+    </div>
+
+    <div id="files"></div>
+  </section>
+
+  <section class="card">
+    <h2>Step 3 — Save Data List & Sync</h2>
+    <p class="muted">Pick Save Data below, then upload from selected/mapped folders or download the save data.</p>
+
+
+
+    <div id="branch-list" class="branch-list">
+      <!-- filled by JS -->
+    </div>
+
+    <div class="row" style="margin-top:8px; gap:8px; flex-wrap:wrap">
+      <button id="btn-upload-checked-mapped" title="Upload mapped folders for all CHECKED branches in this repo">Upload Checked</button>
+      <button id="btn-upload-all-mapped" title="Upload mapped folders for ALL repos & branches in persisted mappings">OneClick Upload for ALL Save Data</button>
+      <button id="sync-all" title="Download checked branches to mapped/selected folders">Download Checked Save Data</button>
+      <button id="btn-download-all-mapped" title="Download ALL repositories & branches to their mapped folders">Download ALL Save Data</button>
+    </div>
+
+    <progress id="progress" value="0" max="100" style="width:100%;height:10px;margin-top:8px;"></progress>
+    <pre id="log" class="log"></pre>
+  </section>
+</main>
+
 
     <footer>
-      <span class="muted">Make Sure you have set up Repository in Github, Obtain your token and ensure you know your game saves file location. Always set correct Current Cloud Backup Folder before performing backup or download</span>
+      <span class="muted">Make sure you have setup Repository in Github and at least create a Readme.md file in main branch</code>.</span>
     </footer>
 
     <script src="/static/main.js"></script>

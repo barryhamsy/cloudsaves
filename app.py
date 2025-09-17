@@ -156,31 +156,50 @@ def github_get_file_sha_if_exists(owner: str, repo: str, path: str, branch: str,
     r = requests.get(url, headers=github_headers(token), params={"ref": branch})
     if r.status_code == 200:
         data = r.json()
-        if isinstance(data, dict) and "sha" in data:
-            return data["sha"]
+        if isinstance(data, dict):
+            return data.get("sha")
     return None
 
-def github_put_file(owner: str, repo: str, path: str, branch: str, token: str, content_bytes: bytes, message: str) -> Dict:
-    b64 = base64.b64encode(content_bytes).decode("ascii")
-    sha_existing = github_get_file_sha_if_exists(owner, repo, path, branch, token)
-    payload = {"message": message, "content": b64, "branch": branch}
-    if sha_existing:
-        payload["sha"] = sha_existing
+def github_put_file(owner: str, repo: str, path: str, branch: str, token: str,
+                    content_bytes: bytes, message: str, sha: Optional[str] = None) -> Dict:
+    """
+    Create or update a file via GitHub Contents API.
+    If sha is provided, it updates; otherwise it creates.
+    """
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+    b64 = base64.b64encode(content_bytes).decode("ascii")
+    payload = {"message": message, "content": b64, "branch": branch}
+    if sha:
+        payload["sha"] = sha
     r = requests.put(url, headers=github_headers(token), json=payload)
+    out = {}
     try:
-        data = r.json()
+        out = r.json()
     except Exception:
-        data = {"error": r.text}
-    data["_status_code"] = r.status_code
-    return data
+        out = {"_text": r.text}
+    out["_status_code"] = r.status_code
+    return out
 
 def github_branch_sha(owner: str, repo: str, branch: str, token: str) -> Optional[str]:
-    ref_url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}"
-    r = requests.get(ref_url, headers=github_headers(token))
-    if r.status_code != 200:
-        return None
-    return r.json().get("object", {}).get("sha")
+    # Correct endpoint: /git/refs/heads/{branch}
+    url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}"
+    r = requests.get(url, headers=github_headers(token))
+    if r.status_code == 200:
+        data = r.json()
+        obj = data.get("object") or {}
+        sha = obj.get("sha") or data.get("sha")
+        if isinstance(sha, str) and len(sha) == 40:
+            return sha
+
+    # Fallback to branches API
+    url2 = f"https://api.github.com/repos/{owner}/{repo}/branches/{branch}"
+    r2 = requests.get(url2, headers=github_headers(token))
+    if r2.status_code == 200:
+        d2 = r2.json()
+        sha = (d2.get("commit") or {}).get("sha")
+        if isinstance(sha, str) and len(sha) == 40:
+            return sha
+    return None
 
 def github_branch_exists(owner: str, repo: str, branch: str, token: str) -> bool:
     url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}"
@@ -222,33 +241,60 @@ def github_get_json_file(owner: str, repo: str, path: str, branch: str, token: s
     return None
 
 def github_create_root_commit_from_empty_tree(owner: str, repo: str, token: str, message: str) -> Tuple[bool, Optional[str], str]:
+    """
+    Create a root commit (no parents) pointing to the empty tree.
+    Returns (ok, error_message, commit_sha).
+    """
     url = f"https://api.github.com/repos/{owner}/{repo}/git/commits"
     payload = {"message": message, "tree": EMPTY_TREE_SHA, "parents": []}
     r = requests.post(url, headers=github_headers(token), json=payload)
-    if r.status_code != 201:
-        try:
-            err = r.json()
-        except Exception:
-            err = {"error": r.text}
-        return False, None, f"{r.status_code}: {err}"
-    return True, r.json().get("sha"), "created"
+    if r.status_code not in (200, 201):
+        return False, f"commit error: {r.status_code} {r.text}", ""
+    sha = (r.json() or {}).get("sha") or ""
+    if not isinstance(sha, str) or len(sha) != 40:
+        return False, f"commit sha invalid: {sha!r}", ""
+    return True, None, sha
 
-def create_clean_branch(owner: str, repo: str, new_branch: str, token: str) -> Tuple[bool, str]:
-    ok, commit_sha, msg = github_create_root_commit_from_empty_tree(
-        owner, repo, token, f"Initialize clean branch '{new_branch}'"
-    )
-    if not ok or not commit_sha:
-        return False, f"Failed to create root commit from empty tree: {msg}"
+def github_create_ref(owner: str, repo: str, ref: str, sha: str, token: str) -> Tuple[bool, str]:
+    """
+    Create a new Git reference (e.g., refs/heads/branch-name) pointing to a commit SHA.
+    Returns (ok, message).
+    """
+    if not isinstance(sha, str) or len(sha) != 40:
+        return False, f"ref error: invalid sha length {len(sha) if isinstance(sha, str) else 'N/A'}"
     url = f"https://api.github.com/repos/{owner}/{repo}/git/refs"
-    payload = {"ref": f"refs/heads/{new_branch}", "sha": commit_sha}
+    payload = {"ref": ref, "sha": sha}
     r = requests.post(url, headers=github_headers(token), json=payload)
-    if r.status_code != 201:
-        try:
-            err = r.json()
-        except Exception:
-            err = {"error": r.text}
-        return False, f"{r.status_code}: {err}"
-    return True, "created"
+    if r.status_code in (200, 201):
+        return True, "OK"
+    if r.status_code == 422 and "Reference already exists" in r.text:
+        # Treat as success for idempotency
+        return True, "exists"
+    return False, f"ref error: {r.status_code} {r.text}"
+
+
+def create_clean_branch(owner: str, repo: str, branch: str, token: str) -> Tuple[bool, str]:
+    """
+    Create an orphan (clean) branch: a root commit with no parents, then a ref.
+    Idempotent if the ref already exists.
+    """
+    # Already exists?
+    if github_branch_sha(owner, repo, branch, token):
+        return True, "exists"
+
+    ok, err, commit_sha = github_create_root_commit_from_empty_tree(
+        owner, repo, token, f"Initialize clean branch {branch}"
+    )
+    if not ok:
+        return False, err or "failed to create root commit"
+
+    if not commit_sha or len(commit_sha) != 40:
+        return False, f"invalid commit sha: {commit_sha!r}"
+
+    ok, msg = github_create_ref(owner, repo, f"refs/heads/{branch}", commit_sha, token)
+    if not ok and "exists" not in (msg or ""):
+        return False, msg
+    return True, "created" if ok else "exists"
 
 def write_branch_meta(owner: str, repo: str, branch: str, token: str, local_folder: str) -> Dict:
     existing = github_get_json_file(owner, repo, META_FILENAME, branch, token) or {}
@@ -400,32 +446,6 @@ def api_branches():
         out.append({"name": b, "mapped_folder": mapped, "is_default": (b == default_branch), "last_updated": last})
     return jsonify({"branches": out, "default_branch": default_branch})
 
-@app.route("/api/create-branch", methods=["POST"])
-def api_create_branch():
-    token = get_token()
-    if not token:
-        return jsonify({"error": "No GitHub token configured"}), 400
-    owner = STATE["owner"]
-    repo = STATE["repo"]
-    data = request.get_json(force=True)
-    new_branch = data.get("name", "").strip()
-    if not (owner and repo and new_branch):
-        return jsonify({"error": "Missing owner/repo or new branch name"}), 400
-
-    # idempotent: succeed if already exists
-    if github_branch_exists(owner, repo, new_branch, token):
-        STATE["branch"] = new_branch
-        persist_now()
-        return jsonify({"status": "exists", "branch": new_branch, "base": "clean"})
-
-    ok, msg = create_clean_branch(owner, repo, new_branch, token)
-    if not ok:
-        return jsonify({"error": msg}), 400
-
-    STATE["branch"] = new_branch
-    persist_now()
-    return jsonify({"status": "created", "branch": new_branch, "base": "clean"})
-
 @app.route("/api/scan", methods=["GET"])
 def api_scan():
     base = STATE["selected_folder"]
@@ -481,6 +501,35 @@ def api_upload():
     return Response(stream_with_context(iter_upload(owner, repo, branch, base_path, token)),
                     mimetype="application/x-ndjson")
 
+@app.route("/api/delete-branch", methods=["POST"])
+def api_delete_branch():
+    token = get_token()
+    if not token:
+        return jsonify({"error": "No GitHub token configured"}), 400
+
+    owner = STATE.get("owner")
+    repo = STATE.get("repo")
+    data = request.get_json(force=True) or {}
+    branch = (data.get("name") or "").strip()
+
+    if not (owner and repo and branch):
+        return jsonify({"error": "Missing owner/repo or branch name"}), 400
+
+    # Don’t allow deleting main/master for safety
+    if branch in ("main", "master"):
+        return jsonify({"error": f"Refusing to delete protected branch '{branch}'"}), 400
+
+    url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}"
+    r = requests.delete(url, headers=github_headers(token))
+
+    if r.status_code == 204:
+        return jsonify({"status": "deleted", "branch": branch})
+    elif r.status_code == 404:
+        return jsonify({"status": "not_found", "branch": branch})
+    else:
+        return jsonify({"error": f"delete error: {r.status_code} {r.text}"}), 400
+
+
 @app.route("/api/download", methods=["POST"])
 def api_download():
     token = get_token()
@@ -534,6 +583,129 @@ def api_download():
 
     return jsonify({"downloaded": written, "total": len(written), "used_path": str(base_path)})
 
+
+def iter_skip(reason: str):
+    """
+    Stream a minimal NDJSON no-op with a reason message.
+    Used by mapped endpoints when nothing to do.
+    """
+    yield (json.dumps({"event": "start", "total": 0}) + "\n").encode("utf-8")
+    yield (json.dumps({"event": "note", "message": reason}) + "\n").encode("utf-8")
+    yield (json.dumps({"event": "end", "total": 0}) + "\n").encode("utf-8")
+
+@app.route("/api/create-branch", methods=["POST"])
+def api_create_branch():
+    token = get_token()
+    if not token:
+        return jsonify({"error": "No GitHub token configured"}), 400
+
+    owner = STATE.get("owner")
+    repo  = STATE.get("repo")
+    data = request.get_json(force=True) or {}
+    new_branch = (data.get("name") or "").strip()
+
+    if not (owner and repo and new_branch):
+        return jsonify({"error": "Missing owner/repo or new branch name"}), 400
+
+    # Idempotent: if exists, just switch to it
+    if github_branch_exists(owner, repo, new_branch, token):
+        STATE["branch"] = new_branch
+        persist_now()
+        return jsonify({"status": "exists", "branch": new_branch, "base": "clean"})
+
+    # Create orphan (clean) branch
+    ok, msg = create_clean_branch(owner, repo, new_branch, token)
+    if not ok:
+        return jsonify({"error": msg}), 400
+
+    # --- ADD README ON NEW BRANCH (best-effort) ----------------------------
+    try:
+        readme_path = "README.md"
+        # Optional: include a tiny, useful README
+        content = f"# {repo}:{new_branch}\n\n" \
+                  f"Created as a clean/orphan branch.\n\n" \
+                  f"- Owner/Repo: `{owner}/{repo}`\n" \
+                  f"- Branch: `{new_branch}`\n" \
+                  f"- Created by GitHub Cloud Backup app.\n"
+        content_bytes = content.encode("utf-8")
+
+        # If you have this helper, it’s perfect to handle create/update logic:
+        #   github_put_file(owner, repo, path, branch, token, content_bytes, message)
+        # If README already exists (unlikely on a fresh orphan), you can fetch its SHA first:
+        sha = github_get_file_sha_if_exists(owner, repo, readme_path, new_branch, token)
+        res = github_put_file(
+            owner, repo, readme_path, new_branch, token, content_bytes,
+            message=f"Add starter README to {new_branch}",
+            sha=sha  # many helpers accept sha=None; pass when you have it
+        )
+        # You can ignore ‘res’ or log it
+    except Exception:
+        # Best-effort; don’t fail branch creation if README write hiccups
+        pass
+    # -----------------------------------------------------------------------
+
+    STATE["branch"] = new_branch
+    persist_now()
+    return jsonify({"status": "created", "branch": new_branch, "base": "clean"})
+
+
+@app.route("/api/download-all-mapped", methods=["POST"])
+def api_download_all_mapped():
+    token = get_token()
+    if not token:
+        return jsonify({"error": "No GitHub token configured"}), 400
+    fmap = _persist.get("folders_map", {})
+    if not fmap:
+        # keep behavior consistent with other mapped endpoints: stream a note
+        return Response(stream_with_context(iter_skip("No persisted mappings found.")),
+                        mimetype="application/x-ndjson")
+
+    def streamer():
+        yield (json.dumps({"event": "start", "total": 0}) + "\n").encode("utf-8")
+        for owner, repos in fmap.items():
+            for repo, branches in repos.items():
+                # ensure repo exists / credentials OK once per repo
+                ok, msg, _repo_obj = ensure_repo_exists(owner, repo, token)
+                if not ok:
+                    yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}] {msg}."}) + "\n").encode("utf-8")
+                    continue
+                for br, base in branches.items():
+                    base_path = Path(base)
+                    # Announce context
+                    yield (json.dumps({"event": "context", "owner": owner, "repo": repo, "branch": br, "base": str(base_path)}) + "\n").encode("utf-8")
+                    try:
+                        base_path.mkdir(parents=True, exist_ok=True)
+                    except Exception as e:
+                        yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Cannot create base folder: {e}."}) + "\n").encode("utf-8")
+                        yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+                        continue
+                    # Download tree
+                    try:
+                        tree = github_tree(owner, repo, br, token)
+                    except Exception as e:
+                        yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Failed listing tree: {e}."}) + "\n").encode("utf-8")
+                        yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+                        continue
+                    for item in tree.get("tree", []):
+                        if item.get("type") != "blob":
+                            continue
+                        path = item["path"]
+                        try:
+                            blob = github_blob(owner, repo, item["sha"], token)
+                            if blob is None:
+                                yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Skip {path}: blob missing."}) + "\n").encode("utf-8")
+                                continue
+                            target = base_path / path
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            with target.open("wb") as f:
+                                f.write(blob)
+                            yield (json.dumps({"event": "file", "path": str(target), "status_code": 200}) + "\n").encode("utf-8")
+                        except Exception as e:
+                            yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Error {path}: {e}."}) + "\n").encode("utf-8")
+                    yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+        yield (json.dumps({"event": "end", "total": 0}) + "\n").encode("utf-8")
+
+    return Response(stream_with_context(streamer()), mimetype="application/x-ndjson")
 @app.route("/api/sync-multi", methods=["POST"])
 def api_sync_multi():
     token = get_token()
@@ -563,7 +735,7 @@ def api_sync_multi():
             for item in tree.get("tree", []):
                 if item.get("type") == "blob":
                     blob = github_blob(owner, repo, item["sha"], token)
-                    if not blob: 
+                    if not blob:
                         continue
                     dest = base_path / item["path"]
                     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -600,7 +772,7 @@ try:
         t = threading.Thread(target=start_server, daemon=True)
         t.start()
         window = webview.create_window(
-            "GitHub Cloud Backup",
+            "Steam Game Cloud Backup - by BihiBihi",
             "http://127.0.0.1:5555",
             width=1200,
             height=780,

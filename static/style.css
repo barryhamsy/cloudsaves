@@ -31,3 +31,18 @@ button:hover{filter:brightness(1.1)}
 progress{appearance:none}
 progress::-webkit-progress-bar{background:#0b1827;border-radius:6px;border:1px solid #1e3a5a}
 progress::-webkit-progress-value{background:linear-gradient(90deg,var(--accent),#7ee787);border-radius:6px}
+/* Make just the branch list scrollable */
+/* Make just the list scrollable */
+#branch-list {
+  max-height: 320px;          /* adjust as you like */
+  overflow-y: auto;
+}
+
+/* Sticky header row */
+.branch-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;                 /* sit above rows while scrolling */
+  background: #0b1b2d;        /* match your card bg (adjust if needed) */
+  border-bottom: 1px solid #12314b;
+}
