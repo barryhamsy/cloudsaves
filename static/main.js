@@ -207,17 +207,68 @@ async function loadBranches(){
   }
 }
 
+function _streamMappedResponse(resp, labelComplete){
+  const progress = document.getElementById('progress');
+  progress.value = 0;
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '', total = 0, doneCount = 0;
+
+  return (async () => {
+    while(true){
+      const {value, done} = await reader.read();
+      if(done) break;
+      buf += decoder.decode(value, {stream:true});
+      let idx;
+      while((idx = buf.indexOf('\n')) >= 0){
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx+1);
+        if(!line) continue;
+        try{
+          const evt = JSON.parse(line);
+          if(evt.event === 'start'){
+            total = evt.total || 0;
+            progress.value = total ? 0 : 10; // give a tiny bump so bar is visible
+          }else if(evt.event === 'file'){
+            doneCount++;
+            if(evt.status_code >= 200 && evt.status_code < 300){
+              log(`✓ ${evt.path} [${evt.status_code}]`);
+            }else{
+              log(`✗ ${evt.path} ${evt.error ? JSON.stringify(evt.error) : ''}`);
+            }
+            if(total){
+              progress.value = Math.min(100, Math.round((doneCount / total) * 100));
+            }
+          }else if(evt.event === 'note'){
+            log(`ℹ ${evt.message}`);
+          }else if(evt.event === 'context'){
+            log(`--- ${evt.owner}/${evt.repo}:${evt.branch} (${evt.base}) ---`);
+          }else if(evt.event === 'context_end'){
+            log(`--- done: ${evt.branch} ---`);
+          }else if(evt.event === 'end'){
+            progress.value = 100;
+            log(labelComplete || 'Done.');
+          }
+        }catch(e){ /* ignore malformed line */ }
+      }
+    }
+  })();
+}
+
 async function syncAll(){
   const boxes = Array.from(document.querySelectorAll('#branch-list input[type=checkbox]:checked'));
   const checked = boxes.map(b => b.value);
   if(checked.length === 0){ alert('Select at least one branch.'); return; }
   log('Syncing branches: ' + checked.join(', '));
   try{
-    const res = await getJSON('/api/sync-multi', {method:'POST', body:JSON.stringify({branches:checked})});
-    for(const [branch, info] of Object.entries(res)){
-      if(info.error){ log(`✗ ${branch}: ${info.error}`); }
-      else{ log(`✓ ${branch}: Downloaded ${info.downloaded} files to ${info.folder}`); }
-    }
+    const r = await fetch('/api/sync-multi', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({branches: checked})
+    });
+    if(!r.ok){ throw new Error(await r.text()); }
+    // stream & update progress
+    await _streamMappedResponse(r, 'Sync complete.');
   }catch(e){
     log('Sync error: ' + e.message);
   }
@@ -460,10 +511,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   bind('btn-upload-checked-mapped', uploadMappedChecked);
   bind('create-branch', ()=>{ createBranch(); });
   bind('delete-branch', ()=>{ deleteBranch(); });
+  bind('btn-download-checked-selected', downloadCheckedToSelected);
+  bind('btn-download-checked-chosen', downloadCheckedToChosenFolder);
+
 });
 
 window.createBranch = createBranch;
-
 
 async function uploadMappedChecked(){
   const boxes = Array.from(document.querySelectorAll('#branch-list input[type=checkbox]:checked'));
@@ -495,6 +548,28 @@ async function downloadAllMapped(){
   try{
     const r = await fetch('/api/download-all-mapped', {method:'POST', headers:{'Content-Type':'application/json'}, body: '{}'});
     if(!r.ok){ throw new Error(await r.text()); }
+
+
+async function downloadCheckedMapped(){
+  const boxes = Array.from(document.querySelectorAll('#branch-list input[type=checkbox]:checked'));
+  const branches = boxes.map(b => b.value);
+  if(branches.length === 0){
+    alert('Select at least one save data to download.');
+    return;
+  }
+  log('Downloading checked save data to MAPPED folders…');
+  try{
+    const r = await fetch('/api/download-checked-mapped', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({branches})
+    });
+    if(!r.ok){ throw new Error(await r.text()); }
+    await _streamMappedResponse(r, 'Download to MAPPED folders complete.');
+  }catch(e){
+    log('Download (checked → mapped) error: ' + e.message);
+  }
+}
     await _streamMappedResponse(r, 'Download ALL Save Data complete.');
   }catch(e){
     log('Download ALL Save Data error: ' + e.message);
@@ -555,5 +630,67 @@ async function deleteBranch(){
     }
   }catch(e){
     alert('Delete branch failed: ' + e.message);
+  }
+}
+async function downloadCheckedToSelected(){
+  const boxes = Array.from(document.querySelectorAll('#branch-list input[type=checkbox]:checked'));
+  const branches = boxes.map(b => b.value);
+  if(branches.length === 0){ alert('Select at least one save data.'); return; }
+  log('Downloading checked save data to Selected Folder…');
+  try{
+    const r = await fetch('/api/download-checked-to-selected', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({branches})
+    });
+    if(!r.ok){ throw new Error(await r.text()); }
+    await _streamMappedResponse(r, 'Download (checked → selected) complete.');
+  }catch(e){
+    log('Download (checked → selected) error: ' + e.message);
+  }
+}
+
+
+
+async function downloadCheckedToChosenFolder(){
+  // collect checked branches from the Step 3 list
+  const boxes = Array.from(document.querySelectorAll('#branch-list input[type=checkbox]:checked'));
+  const branches = boxes.map(b => b.value);
+  if(branches.length === 0){
+    alert('Select at least one save data to download.');
+    return;
+  }
+
+  // ask for a target folder via pywebview
+  let target = null;
+  try{
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.select_folder){
+      const result = await window.pywebview.api.select_folder();
+      target = result && result.selected_folder;
+    } else {
+      alert('Folder picker not available in this environment. Please run the desktop app (pywebview build).');
+      return;
+    }
+  }catch(e){
+    alert('Folder selection failed: ' + e.message);
+    return;
+  }
+  if(!target){
+    log('Download cancelled: no folder chosen.');
+    return;
+  }
+
+  log('Downloading checked save data to: ' + target);
+  try{
+    const r = await fetch('/api/download-checked-to-path', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({branches, target_folder: target})
+    });
+    if(!r.ok){ throw new Error(await r.text()); }
+    // stream NDJSON so the progress bar and log update
+    await _streamMappedResponse(r, 'Download to chosen folder complete.');
+  }catch(e){
+    log('Download (checked → chosen) error: ' + e.message);
   }
 }

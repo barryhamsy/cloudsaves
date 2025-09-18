@@ -136,7 +136,7 @@ def list_files(base_dir: Path) -> List[Dict]:
 
 def github_headers(token: str) -> Dict[str, str]:
     return {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"token {token}",   # classic PATs need "token", not "Bearer"
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": APP_NAME,
@@ -151,7 +151,7 @@ def ensure_repo_exists(owner: str, repo: str, token: str) -> Tuple[bool, str, Op
         return False, "Repository not found or no access", None
     return False, f"Error {r.status_code}: {r.text}", None
 
-def github_get_file_sha_if_exists(owner: str, repo: str, path: str, branch: str, token: str) -> Optional[str]:
+def github_get_file_sha_if_exists(owner: str, repo: str, path: str, branch: str, token: str):
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
     r = requests.get(url, headers=github_headers(token), params={"ref": branch})
     if r.status_code == 200:
@@ -159,6 +159,27 @@ def github_get_file_sha_if_exists(owner: str, repo: str, path: str, branch: str,
         if isinstance(data, dict):
             return data.get("sha")
     return None
+
+def put_file_overwrite(owner: str, repo: str, branch: str, token: str,
+                       rel_path: str, content_bytes: bytes, message: str = None):
+    """
+    Always overwrite: if file exists, include its sha; otherwise create.
+    Returns a dict with "_status_code" so existing code paths still work.
+    """
+    sha = github_get_file_sha_if_exists(owner, repo, rel_path, branch, token)
+    commit_msg = message or f"Update {rel_path}"
+    resp = github_put_file(owner, repo, rel_path, branch, token,
+                           content_bytes, message=commit_msg, sha=sha) or {}
+    code = resp.get("_status_code", 0)
+    if code == 409:
+        # fetch fresh sha and retry once
+        sha = github_get_file_sha_if_exists(owner, repo, rel_path, branch, token)
+        resp = github_put_file(owner, repo, rel_path, branch, token,
+                               content_bytes, message=f"Force overwrite {rel_path}", sha=sha)
+        code = resp.get("_status_code", 0)
+    resp["_status_code"] = code
+    return resp
+
 
 def github_put_file(owner: str, repo: str, path: str, branch: str, token: str,
                     content_bytes: bytes, message: str, sha: Optional[str] = None) -> Dict:
@@ -331,6 +352,73 @@ def write_branch_meta(owner: str, repo: str, branch: str, token: str, local_fold
     res = github_put_file(owner, repo, META_FILENAME, branch, token, content, message=f"Update {META_FILENAME} for branch mapping")
     return {"status_code": res.get("_status_code", 0), "result": res}
 
+# Fetch branches (names only)
+def github_list_branches(owner: str, repo: str, token: str) -> list:
+    url = f"https://api.github.com/repos/{owner}/{repo}/branches"
+    out, page = [], 1
+    while True:
+        r = requests.get(url, headers=github_headers(token), params={"per_page": 100, "page": page})
+        if r.status_code != 200:
+            break
+        batch = r.json() or []
+        out.extend([b.get("name") for b in batch if isinstance(b, dict) and b.get("name")])
+        if len(batch) < 100:
+            break
+        page += 1
+    return out
+
+# Load remote .ghcb.json for a branch and pick a folder for THIS machine
+def mapped_folder_from_remote(owner: str, repo: str, branch: str, token: str) -> str | None:
+    try:
+        meta = github_get_json_file(owner, repo, ".ghcb.json", branch, token)
+        if not isinstance(meta, dict):
+            return None
+        # Reuse your existing resolution logic (hostname/user-specific mapping)
+        base = pick_mapped_folder(meta)
+        return str(base) if base else None
+    except Exception:
+        return None
+
+def hydrate_folders_map_from_remote_on_boot():
+    """
+    On app start: read remote .ghcb.json for each branch and persist any mapped folders
+    into ~/.github_cloud_backup_app.json so OneClick flows work immediately.
+    Non-fatal if token/owner/repo are missing.
+    """
+    try:
+        token = get_token()
+        owner = STATE.get("owner")
+        repo  = STATE.get("repo")
+        if not (token and owner and repo):
+            return
+
+        # Get all branches (fallback to current if list fails)
+        branches = github_list_branches(owner, repo, token) or [STATE.get("branch")] or []
+        if not branches:
+            return
+
+        fmap = _persist.setdefault("folders_map", {})
+
+        updated = False
+        for br in branches:
+            # If already known, skip
+            key = f"{owner}/{repo}/{br}"
+            if fmap.get(key):
+                continue
+
+            base = mapped_folder_from_remote(owner, repo, br, token)
+            if base:
+                # Record mapping; do not overwrite an existing one
+                fmap[key] = base
+                updated = True
+
+        if updated:
+            save_persisted_state(_persist)
+    except Exception:
+        # Never crash app on boot; just skip hydration
+        pass
+
+
 def pick_mapped_folder(meta: Optional[Dict]) -> Optional[str]:
     if not meta:
         return None
@@ -467,7 +555,7 @@ def iter_upload(owner: str, repo: str, branch: str, base_path: Path, token: str)
         p = base_path / rel
         try:
             content = p.read_bytes()
-            resp = github_put_file(owner, repo, rel, branch, token, content, message=f"Upload {rel}")
+            resp = put_file_overwrite(owner, repo, branch, token, rel, content, message=f"Upload {rel}")
             code = resp.get("_status_code", 0)
             err = None if 200 <= code < 300 else resp
         except Exception as e:
@@ -529,6 +617,95 @@ def api_delete_branch():
     else:
         return jsonify({"error": f"delete error: {r.status_code} {r.text}"}), 400
 
+@app.route("/api/download-checked-to-path", methods=["POST"])
+def api_download_checked_to_path():
+    """
+    Download checked branches to an explicit folder chosen by the user.
+    Request JSON: {"branches": ["br1","br2", ...], "target_folder": "C:/some/folder"}
+    Streams NDJSON progress: start/context/file/note/context_end/end
+    """
+    token = get_token()
+    if not token:
+        return jsonify({"error": "No GitHub token configured"}), 400
+
+    owner = STATE.get("owner")
+    repo  = STATE.get("repo")
+
+    data = request.get_json(silent=True) or {}
+    branches = data.get("branches") or []
+    target_folder = (data.get("target_folder") or "").strip()
+
+    if not owner or not repo:
+        return jsonify({"error": "Missing owner/repo"}), 400
+    if not branches:
+        return jsonify({"error": "No branches specified"}), 400
+    if not target_folder:
+        return jsonify({"error": "No target folder provided"}), 400
+
+    base_path = Path(target_folder)
+    try:
+        base_path.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        return jsonify({"error": f"Cannot create target folder: {e}"}), 400
+
+    def streamer():
+        yield (json.dumps({"event": "start", "total": 0}) + "\n").encode("utf-8")
+
+        ok, msg, _repo = ensure_repo_exists(owner, repo, token)
+        if not ok:
+            yield (json.dumps({"event": "note",
+                               "message": f"[{owner}/{repo}] {msg}."}) + "\n").encode("utf-8")
+            yield (json.dumps({"event": "end", "total": 0}) + "\n").encode("utf-8")
+            return
+
+        for br in branches:
+            target_root = base_path / br  # per-branch subfolder
+            yield (json.dumps({"event": "context",
+                               "owner": owner, "repo": repo, "branch": br,
+                               "base": str(target_root)}) + "\n").encode("utf-8")
+
+            try:
+                target_root.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                yield (json.dumps({"event": "note",
+                                   "message": f"[{br}] Cannot create folder: {e}."}) + "\n").encode("utf-8")
+                yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+                continue
+
+            # List repo tree for the branch
+            try:
+                tree = github_tree(owner, repo, br, token)
+            except Exception as e:
+                yield (json.dumps({"event": "note",
+                                   "message": f"[{owner}/{repo}:{br}] Failed listing tree: {e}."}) + "\n").encode("utf-8")
+                yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+                continue
+
+            for item in tree.get("tree", []):
+                if item.get("type") != "blob":
+                    continue
+                rel = item["path"]
+                try:
+                    blob = github_blob(owner, repo, item["sha"], token)
+                    if blob is None:
+                        yield (json.dumps({"event": "note",
+                                           "message": f"[{owner}/{repo}:{br}] Skip {rel}: blob missing."}) + "\n").encode("utf-8")
+                        continue
+                    outp = target_root / rel
+                    outp.parent.mkdir(parents=True, exist_ok=True)
+                    with outp.open("wb") as f:
+                        f.write(blob)
+                    yield (json.dumps({"event": "file",
+                                       "path": str(outp), "status_code": 200}) + "\n").encode("utf-8")
+                except Exception as e:
+                    yield (json.dumps({"event": "note",
+                                       "message": f"[{owner}/{repo}:{br}] Error {rel}: {e}."}) + "\n").encode("utf-8")
+
+            yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+
+        yield (json.dumps({"event": "end", "total": 0}) + "\n").encode("utf-8")
+
+    return Response(stream_with_context(streamer()), mimetype="application/x-ndjson")
 
 @app.route("/api/download", methods=["POST"])
 def api_download():
@@ -648,7 +825,6 @@ def api_create_branch():
     persist_now()
     return jsonify({"status": "created", "branch": new_branch, "base": "clean"})
 
-
 @app.route("/api/download-all-mapped", methods=["POST"])
 def api_download_all_mapped():
     token = get_token()
@@ -662,98 +838,330 @@ def api_download_all_mapped():
 
     def streamer():
         yield (json.dumps({"event": "start", "total": 0}) + "\n").encode("utf-8")
-        for owner, repos in fmap.items():
-            for repo, branches in repos.items():
-                # ensure repo exists / credentials OK once per repo
-                ok, msg, _repo_obj = ensure_repo_exists(owner, repo, token)
-                if not ok:
-                    yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}] {msg}."}) + "\n").encode("utf-8")
+        # fmap is flat: key "owner/repo/branch" -> folder
+        for key, base in fmap.items():
+            try:
+                owner, repo, br = key.split("/", 2)
+            except ValueError:
+                # unexpected key format; skip
+                continue
+            # ensure repo exists / credentials OK once per repo
+            ok, msg, _repo_obj = ensure_repo_exists(owner, repo, token)
+            if not ok:
+                yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}] {msg}."}) + "\n").encode("utf-8")
+                continue
+
+            base_path = Path(base)
+            # Announce context
+            yield (json.dumps({"event": "context", "owner": owner, "repo": repo, "branch": br, "base": str(base_path)}) + "\n").encode("utf-8")
+            try:
+                base_path.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Cannot create base folder: {e}."}) + "\n").encode("utf-8")
+                yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+                continue
+            # Download tree
+            try:
+                tree = github_tree(owner, repo, br, token)
+            except Exception as e:
+                yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Failed listing tree: {e}."}) + "\n").encode("utf-8")
+                yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+                continue
+            for item in tree.get("tree", []):
+                if item.get("type") != "blob":
                     continue
-                for br, base in branches.items():
-                    base_path = Path(base)
-                    # Announce context
-                    yield (json.dumps({"event": "context", "owner": owner, "repo": repo, "branch": br, "base": str(base_path)}) + "\n").encode("utf-8")
-                    try:
-                        base_path.mkdir(parents=True, exist_ok=True)
-                    except Exception as e:
-                        yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Cannot create base folder: {e}."}) + "\n").encode("utf-8")
-                        yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+                path = item["path"]
+                try:
+                    blob = github_blob(owner, repo, item["sha"], token)
+                    if blob is None:
+                        yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Skip {path}: blob missing."}) + "\n").encode("utf-8")
                         continue
-                    # Download tree
-                    try:
-                        tree = github_tree(owner, repo, br, token)
-                    except Exception as e:
-                        yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Failed listing tree: {e}."}) + "\n").encode("utf-8")
-                        yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
-                        continue
-                    for item in tree.get("tree", []):
-                        if item.get("type") != "blob":
-                            continue
-                        path = item["path"]
-                        try:
-                            blob = github_blob(owner, repo, item["sha"], token)
-                            if blob is None:
-                                yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Skip {path}: blob missing."}) + "\n").encode("utf-8")
-                                continue
-                            target = base_path / path
-                            target.parent.mkdir(parents=True, exist_ok=True)
-                            with target.open("wb") as f:
-                                f.write(blob)
-                            yield (json.dumps({"event": "file", "path": str(target), "status_code": 200}) + "\n").encode("utf-8")
-                        except Exception as e:
-                            yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Error {path}: {e}."}) + "\n").encode("utf-8")
-                    yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+                    target = base_path / path
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with target.open("wb") as f:
+                        f.write(blob)
+                    yield (json.dumps({"event": "file", "path": str(target), "status_code": 200}) + "\n").encode("utf-8")
+                except Exception as e:
+                    yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Error {path}: {e}."}) + "\n").encode("utf-8")
+            yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
         yield (json.dumps({"event": "end", "total": 0}) + "\n").encode("utf-8")
 
     return Response(stream_with_context(streamer()), mimetype="application/x-ndjson")
+
+@app.route("/api/upload-multi-mapped", methods=["POST"])
+def api_upload_multi_mapped():
+    token = get_token()
+    if not token:
+        return jsonify({"error": "No GitHub token configured"}), 400
+    owner, repo = STATE["owner"], STATE["repo"]
+    data = request.get_json(force=True) or {}
+    branches = data.get("branches") or []
+    if not branches:
+        return jsonify({"error": "No branches specified"}), 400
+    ok, msg, _ = ensure_repo_exists(owner, repo, token)
+    if not ok:
+        return jsonify({"error": msg}), 400
+
+    def streamer():
+        yield (json.dumps({"event":"start","total":0}) + "\n").encode()
+        for br in branches:
+            # resolve mapped folder for this branch
+            meta = github_get_json_file(owner, repo, META_FILENAME, br, token)
+            base = pick_mapped_folder(meta) or lookup_folder(_persist, owner, repo, br)
+            if not base:
+                yield (json.dumps({"event":"note",
+                                   "message": f"[{owner}/{repo}:{br}] No mapped folder, skipping."}) + "\n").encode()
+                continue
+            base_path = Path(base)
+            if not base_path.exists():
+                yield (json.dumps({"event":"note",
+                                   "message": f"[{owner}/{repo}:{br}] Folder missing: {base}"}) + "\n").encode()
+                continue
+            yield (json.dumps({"event":"context",
+                               "owner": owner, "repo": repo, "branch": br,
+                               "base": str(base_path)}) + "\n").encode()
+            for f in list_files(base_path):
+                rel = f["relative_path"]
+                try:
+                    content = (base_path / rel).read_bytes()
+                    resp = put_file_overwrite(owner, repo, br, token, rel, content)
+                    code = resp.get("_status_code", 0)
+                    err = None if 200 <= code < 300 else resp
+                except Exception as e:
+                    code, err = 0, {"error": str(e)}
+                yield (json.dumps({"event":"file","path":rel,
+                                   "status_code": code,"error": err}) + "\n").encode()
+            yield (json.dumps({"event":"context_end","branch": br}) + "\n").encode()
+        yield (json.dumps({"event":"end","total":0}) + "\n").encode()
+
+    return Response(stream_with_context(streamer()), mimetype="application/x-ndjson")
+
+
 @app.route("/api/sync-multi", methods=["POST"])
 def api_sync_multi():
     token = get_token()
     if not token:
         return jsonify({"error": "No GitHub token configured"}), 400
     owner, repo = STATE["owner"], STATE["repo"]
-    data = request.get_json(force=True)
+
+    data = request.get_json(force=True) or {}
     branches = data.get("branches", [])
     if not isinstance(branches, list) or not branches:
         return jsonify({"error": "No branches specified"}), 400
 
-    results = {}
-    for branch in branches:
-        try:
-            meta = github_get_json_file(owner, repo, META_FILENAME, branch, token)
-            target = pick_mapped_folder(meta) or lookup_folder(_persist, owner, repo, branch) or STATE["selected_folder"]
-            if not target:
-                results[branch] = {"error": "No mapping or selected folder available"}
-                continue
-            base_path = Path(target)
-            base_path.mkdir(parents=True, exist_ok=True)
-            tree = github_tree(owner, repo, branch, token)
-            if "error" in tree:
-                results[branch] = tree
-                continue
-            written = []
-            for item in tree.get("tree", []):
-                if item.get("type") == "blob":
-                    blob = github_blob(owner, repo, item["sha"], token)
-                    if not blob:
-                        continue
-                    dest = base_path / item["path"]
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    with open(dest, "wb") as f:
-                        f.write(blob)
-                    written.append(item["path"])
-            set_folder_map(_persist, owner, repo, branch, str(base_path))
-            results[branch] = {"downloaded": len(written), "folder": str(base_path)}
-        except Exception as e:
-            results[branch] = {"error": str(e)}
-    persist_now()
-    return jsonify(results)
+    def streamer():
+        # overall start (we’ll compute a rough total = sum of blobs across branches)
+        yield (json.dumps({"event": "start", "total": 0}) + "\n").encode("utf-8")
 
+        for branch in branches:
+            try:
+                # Resolve target folder (same logic you had)
+                meta = github_get_json_file(owner, repo, META_FILENAME, branch, token)
+                target = pick_mapped_folder(meta) or lookup_folder(_persist, owner, repo, branch) or STATE.get("selected_folder")
+                if not target:
+                    yield (json.dumps({"event":"note","message": f"[{branch}] No mapping or selected folder available."}) + "\n").encode("utf-8")
+                    continue
+
+                base_path = Path(target)
+                try:
+                    base_path.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    yield (json.dumps({"event":"note","message": f"[{branch}] Cannot create folder: {e}."}) + "\n").encode("utf-8")
+                    continue
+
+                # Announce branch context
+                yield (json.dumps({"event": "context",
+                                   "owner": owner, "repo": repo,
+                                   "branch": branch, "base": str(base_path)}) + "\n").encode("utf-8")
+
+                # List tree and compute per-branch total files
+                tree = github_tree(owner, repo, branch, token)
+                if isinstance(tree, dict) and tree.get("error"):
+                    yield (json.dumps({"event":"note","message": f"[{branch}] {tree.get('error')}"}) + "\n").encode("utf-8")
+                    yield (json.dumps({"event":"context_end","branch": branch}) + "\n").encode("utf-8")
+                    continue
+
+                items = [it for it in (tree.get("tree") or []) if it.get("type") == "blob"]
+                for item in items:
+                    rel = item["path"]
+                    try:
+                        blob = github_blob(owner, repo, item["sha"], token)
+                        if not blob:
+                            yield (json.dumps({"event":"note","message": f"[{branch}] Skip {rel}: blob missing."}) + "\n").encode("utf-8")
+                            continue
+                        dest = base_path / rel
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        with open(dest, "wb") as f:
+                            f.write(blob)
+                        # Stream one file completion
+                        yield (json.dumps({"event":"file","path": str(dest), "status_code": 200}) + "\n").encode("utf-8")
+                    except Exception as e:
+                        yield (json.dumps({"event":"note","message": f"[{branch}] Error {rel}: {e}."}) + "\n").encode("utf-8")
+
+                # Persist the mapping like before
+                set_folder_map(_persist, owner, repo, branch, str(base_path))
+
+                # Close context for branch
+                yield (json.dumps({"event":"context_end","branch": branch}) + "\n").encode("utf-8")
+
+            except Exception as e:
+                yield (json.dumps({"event":"note","message": f"[{branch}] {e}."}) + "\n").encode("utf-8")
+
+        # Save state and finish
+        persist_now()
+        yield (json.dumps({"event": "end", "total": 0}) + "\n").encode("utf-8")
+
+    return Response(stream_with_context(streamer()),
+                    mimetype="application/x-ndjson")
+
+def load_remote_folders_map(owner, repo, branch, token):
+    try:
+        data = github_get_json_file(owner, repo, ".ghcb.json", branch, token)
+        if data and isinstance(data, dict):
+            fmap = data.get("folders_map")
+            if isinstance(fmap, dict):
+                return fmap
+    except Exception as e:
+        print("Failed to load remote .ghcb.json:", e)
+    return {}
+
+@app.route("/api/upload-all-mapped", methods=["POST"])
+def api_upload_all_mapped():
+    token = get_token()
+    if not token:
+        return jsonify({"error": "No GitHub token configured"}), 400
+
+    fmap = _persist.get("folders_map", {})
+
+    # 🔹 If no local mappings, try to pull from GitHub
+    if not fmap:
+        remote_map = load_remote_folders_map(STATE["owner"], STATE["repo"], STATE["branch"], token)
+        fmap.update(remote_map)
+        _persist["folders_map"] = fmap
+        save_persisted_state(_persist)
+
+    if not fmap:
+        return Response(stream_with_context(iter_skip("No persisted mappings found.")),
+                        mimetype="application/x-ndjson")
+
+    def streamer():
+        yield (json.dumps({"event": "start", "total": 0}) + "\n").encode("utf-8")
+        # fmap is flat: "owner/repo/branch" -> folder
+        for key, base in fmap.items():
+            try:
+                owner, repo, br = key.split("/", 2)
+            except ValueError:
+                continue
+            ok, msg, _repo_obj = ensure_repo_exists(owner, repo, token)
+            if not ok:
+                yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}] {msg}."}) + "\n").encode("utf-8")
+                continue
+            base_path = Path(base)
+            yield (json.dumps({"event": "context", "owner": owner, "repo": repo, "branch": br, "base": str(base_path)}) + "\n").encode("utf-8")
+            if not base_path.exists():
+                yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Local folder not found: {base}."}) + "\n").encode("utf-8")
+                yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+                continue
+            try:
+                # Stream file uploads for this branch/folder
+                for chunk in iter_upload(owner, repo, br, base_path, token):
+                    yield chunk
+            except Exception as e:
+                yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}:{br}] Upload error: {e}."}) + "\n").encode("utf-8")
+            yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+        yield (json.dumps({"event": "end", "total": 0}) + "\n").encode("utf-8")
+
+    return Response(stream_with_context(streamer()), mimetype="application/x-ndjson")
+
+
+@app.route("/api/download-checked-mapped", methods=["POST"])
+def api_download_checked_mapped():
+    """
+    Download the specified branches' files to their mapped folders only
+    (preferring .ghcb.json mapping, then persisted mapping), ignoring the Selected Folder.
+    Streams NDJSON for progress.
+    """
+    token = get_token()
+    if not token:
+        return jsonify({"error": "No GitHub token configured"}), 400
+
+    owner = STATE.get("owner")
+    repo = STATE.get("repo")
+    if not (owner and repo):
+        return jsonify({"error": "Missing owner/repo"}), 400
+
+    data = request.get_json(silent=True) or {}
+    branches = data.get("branches") or []
+    if not branches:
+        return jsonify({"error": "No branches specified"}), 400
+
+    def resolve_mapped_folder(br):
+        # Prefer .ghcb.json mapping
+        meta = github_get_json_file(owner, repo, META_FILENAME, br, token)
+        mapped = pick_mapped_folder(meta)
+        if mapped:
+            return mapped
+        # Fallback to persisted mapping
+        return lookup_folder(_persist, owner, repo, br)
+
+    def streamer():
+        yield (json.dumps({"event": "start", "total": 0}) + "\n").encode("utf-8")
+
+        ok, msg, _ = ensure_repo_exists(owner, repo, token)
+        if not ok:
+            yield (json.dumps({"event": "note", "message": f"[{owner}/{repo}] {msg}."}) + "\n").encode("utf-8")
+            yield (json.dumps({"event": "end", "total": 0}) + "\n").encode("utf-8")
+            return
+
+        for br in branches:
+            base = resolve_mapped_folder(br)
+            if not base:
+                yield (json.dumps({"event": "note", "message": f"[{br}] No mapped folder found."}) + "\n").encode("utf-8")
+                continue
+            base_path = Path(base)
+            yield (json.dumps({"event": "context", "owner": owner, "repo": repo, "branch": br, "base": str(base_path)}) + "\n").encode("utf-8")
+            try:
+                base_path.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                yield (json.dumps({"event": "note", "message": f"[{br}] Cannot create folder: {e}."}) + "\n").encode("utf-8")
+                yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+                continue
+
+            try:
+                tree = github_tree(owner, repo, br, token)
+            except Exception as e:
+                yield (json.dumps({"event": "note", "message": f"[{br}] Failed listing tree: {e}."}) + "\n").encode("utf-8")
+                yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+                continue
+
+            for item in tree.get("tree", []):
+                if item.get("type") != "blob":
+                    continue
+                rel = item["path"]
+                try:
+                    blob = github_blob(owner, repo, item["sha"], token)
+                    if blob is None:
+                        yield (json.dumps({"event": "note", "message": f"[{br}] Skip {rel}: blob missing."}) + "\n").encode("utf-8")
+                        continue
+                    outp = base_path / rel
+                    outp.parent.mkdir(parents=True, exist_ok=True)
+                    with outp.open("wb") as f:
+                        f.write(blob)
+                    yield (json.dumps({"event": "file", "path": str(outp), "status_code": 200}) + "\n").encode("utf-8")
+                except Exception as e:
+                    yield (json.dumps({"event": "note", "message": f"[{br}] Error {rel}: {e}."}) + "\n").encode("utf-8")
+
+            yield (json.dumps({"event": "context_end", "branch": br}) + "\n").encode("utf-8")
+
+        yield (json.dumps({"event": "end", "total": 0}) + "\n").encode("utf-8")
+
+    return Response(stream_with_context(streamer()), mimetype="application/x-ndjson")
 # ------------------- PyWebView glue -------------------
 
 try:
     import webview
 
+    hydrate_folders_map_from_remote_on_boot()
     class JSBridge:
         def select_folder(self):
             win = webview.windows[0]
@@ -764,6 +1172,7 @@ try:
                     set_folder_map(_persist, STATE["owner"], STATE["repo"], STATE["branch"], STATE["selected_folder"])
                 return {"selected_folder": STATE["selected_folder"]}
             return {"selected_folder": None}
+
 
     def start_server():
         app.run(host="127.0.0.1", port=5555, debug=False)

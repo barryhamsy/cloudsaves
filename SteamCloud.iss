@@ -1,5 +1,5 @@
 #define MyAppName "AltSteamCloudSaves"
-#define MyAppVersion "1.0"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "AltSteamCloudSaves"
 #define MyAppExeName "AltSteamCloudSaves.exe"
 
@@ -17,7 +17,7 @@ PrivilegesRequired=admin
 ; Force all users installation (requires admin)
 PrivilegesRequiredOverridesAllowed=commandline
 OutputDir=D:\github_cloud_backup_app\AltSteamCloudSaves
-OutputBaseFilename=AltSteamCloudSaves_1.0.1
+OutputBaseFilename=AltSteamCloudSaves_1.0.2
 SetupIconFile=D:\github_cloud_backup_app\cloudsaves.ico
 Compression=lzma
 SolidCompression=yes

@@ -34,15 +34,13 @@ progress::-webkit-progress-value{background:linear-gradient(90deg,var(--accent),
 /* Make just the branch list scrollable */
 /* Make just the list scrollable */
 #branch-list {
-  max-height: 320px;          /* adjust as you like */
+  max-height: 320px;
   overflow-y: auto;
 }
-
-/* Sticky header row */
 .branch-head {
   position: sticky;
   top: 0;
-  z-index: 1;                 /* sit above rows while scrolling */
-  background: #0b1b2d;        /* match your card bg (adjust if needed) */
+  z-index: 1;
+  background: #0b1b2d;      /* adjust to your theme */
   border-bottom: 1px solid #12314b;
 }
