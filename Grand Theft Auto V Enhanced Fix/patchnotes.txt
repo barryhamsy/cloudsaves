@@ -1,0 +1,9 @@
+Update v1.0.889.22:
+General
+Support has been added for FSR (AMD FidelityFX™ Super Resolution) and DLSS (NVIDIA Deep Learning Super Sampling) frame generation technologies
+
+Update v1.0.889.19:
+General
+Fixed an issue that resulted in weapons not switching as quickly via the Weapon Wheel when using mouse and keyboard
+Fixed an issue that resulted in GTA+ Members being unable to claim free vehicles (PC Enhanced only)
+General fixes for stability and security
