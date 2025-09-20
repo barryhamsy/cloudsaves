@@ -1,6 +1,6 @@
 "3291310"
 {
-	"ChangeNumber"		"69"
+	"ChangeNumber"		"83"
 	"OSType"		"0"
 	"2535448480411986/User_901FA1A057152.ProfileData"
 	{
@@ -1033,5 +1033,29 @@
 		"syncstate"		"2"
 		"persiststate"		"0"
 		"platformstosync2"		"0"
+	}
+	"out/profiles/dltb_settings.dat"
+	{
+		"root"		"0"
+		"size"		"3764"
+		"localtime"		"1758218814"
+		"time"		"1758218815"
+		"remotetime"		"1758218815"
+		"sha"		"6a99c6cef618c157b9194e153a3980de56bf672d"
+		"syncstate"		"1"
+		"persiststate"		"0"
+		"platformstosync2"		"-1"
+	}
+	"out/save/save_ft_0.sav"
+	{
+		"root"		"0"
+		"size"		"29371"
+		"localtime"		"1758218797"
+		"time"		"1758218798"
+		"remotetime"		"1758218798"
+		"sha"		"19b32df29dad551fe3710e6208f28fa88bbcdb13"
+		"syncstate"		"1"
+		"persiststate"		"0"
+		"platformstosync2"		"1"
 	}
 }
