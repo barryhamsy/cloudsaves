@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- HLS support - FIXED: removed trailing spaces in URLs -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <meta charset="UTF-8" />
+  <title>Shadow Play +</title>
+</head>
+<body>
+  <!-- Offline Banner -->
+  <div id="offline-banner" data-i18n="offline_banner" style="display:none;position:sticky;top:0;z-index:9999;background:#2b2f3a;color:#ffeb3b;padding:8px 12px;font-weight:600;border-bottom:1px solid rgba(255,255,255,.12);">
+    API is offline — showing cached list. Latest games not loaded.
+  </div>
+
+<!-- Sidebar open button -->
+<button id="sidebar-open-btn" class="sidebar-open-btn" aria-label="Open sidebar">☰</button>
+
+<!-- Floating Cart Button (top-right) -->
+<button id="floating-cart-btn" class="floating-cart-btn" aria-label="View shopping cart" title="Shopping Cart">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M9 2L7.17 4H1V6H3L6.6 15.59L5.24 18.04C4.52 19.37 5.48 21 7 21H19V19H7L8.1 17H15.55C16.3 17 16.96 16.59 17.3 15.97L20.88 9.48C21.25 8.82 20.77 8 20.01 8H5.21L4.27 6H9V2ZM7 22C5.9 22 5.01 22.9 5.01 24C5.01 25.1 5.9 26 7 26C8.1 26 9 25.1 9 24C9 22.9 8.1 22 7 22ZM17 22C15.9 22 15.01 22.9 15.01 24C15.01 25.1 15.9 26 17 26C18.1 26 19 25.1 19 24C19 22.9 18.1 22 17 22Z" transform="translate(0,-2)" fill="currentColor"/>
+  </svg>
+  <span id="floating-cart-badge" class="floating-cart-badge">0</span>
+</button>
+
+<!-- Activated-for Mini Profile (top-left) -->
+<div id="activated-mini-profile" class="activated-mini-profile" style="display:none;">
+  <img id="activated-mini-avatar" class="activated-mini-avatar"
+       src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100%25' height='100%25' rx='28' ry='28' fill='%23222'/><text x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-family='Arial' font-size='14'>STEAM</text></svg>"
+       alt="Steam avatar" />
+  <div class="activated-mini-meta">
+    <div id="activated-mini-persona" class="activated-mini-persona">Unknown Steam User</div>
+    <div class="activated-mini-steamid">
+      <span class="activated-mini-k">SteamID</span>
+      <span id="activated-mini-steamid" class="activated-mini-v">UNKNOWN</span>
+    </div>
+  </div>
+</div>
+
+<!-- Sidebar -->
+<div id="sidebar" class="sidebar" aria-hidden="true" tabindex="-1">
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Close sidebar">×</button>
+    <!-- Sidebar Tools -->
+    <details id="sidebar-tools" class="sidebar-accordion">
+      <summary><span data-i18n="settings">Settings</span><span class="chev" aria-hidden="true">▸</span></summary>
+      <div class="accordion-body">
+        <div class="sidebar-section">
+          <div class="toggle-row">
+            <span class="toggle-label" data-i18n="parental_control">Parental Control</span>
+            <label class="switch"><input type="checkbox" id="pc-toggle" aria-label="Parental Control"><span class="slider round"></span></label>
+          </div>
+          <small class="toggle-hint" data-i18n="hide_adult">Hide Adult Content</small>
+        </div>
+        <div class="sidebar-section">
+          <div class="zoom-controls">
+            <span class="toggle-hint" data-i18n="resize_ui">Resize UI</span>
+            <div class="zoom-buttons">
+              <button id="zoom-out" class="chip subtle">−</button>
+              <button id="zoom-in" class="chip subtle">＋</button>
+            </div>
+          </div>
+        </div>
+        <div>
+          <button id="activate-btn" class="sidebar-btn" data-i18n="activate_app">Activate App</button>
+          <button id="btn-delete-cdkey" class="sidebar-btn danger" data-i18n="reset_activation">Reset Activation</button>
+        </div>
+      </div>
+    </details>
+    <!-- Theme Picker -->
+    <details id="sidebar-theme" class="sidebar-accordion">
+      <summary><span data-i18n="theme_label">🎨 Theme</span><span class="chev" aria-hidden="true">▸</span></summary>
+      <div class="accordion-body">
+        <div class="sidebar-section">
+          <small class="toggle-hint" data-i18n="choose_theme">Choose your store theme</small>
+          <div id="theme-btn-group" class="theme-btn-group" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+            <button class="sidebar-btn theme-pick-btn" data-theme="original">🎮 Original</button>
+            <button class="sidebar-btn theme-pick-btn" data-theme="cny">💜 Indigo Galaxy</button>
+            <button class="sidebar-btn theme-pick-btn" data-theme="hariraya">🌙 Hari Raya</button>
+          </div>
+          <div id="theme-active-label" style="margin-top:8px;font-size:11px;color:#888;text-align:center;"></div>
+        </div>
+      </div>
+    </details>
+    <!-- Language Switcher -->
+    <details id="sidebar-language" class="sidebar-accordion">
+      <summary><span data-i18n="language_label">🌐 Language</span><span class="chev" aria-hidden="true">▸</span></summary>
+      <div class="accordion-body">
+        <div class="sidebar-section">
+          <small class="toggle-hint" data-i18n="choose_language">Choose your language</small>
+          <div id="lang-btn-group" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+            <button class="sidebar-btn lang-pick-btn" data-lang="en">🇬🇧 English</button>
+            <button class="sidebar-btn lang-pick-btn" data-lang="zh">🇨🇳 中文</button>
+            <button class="sidebar-btn lang-pick-btn" data-lang="th">🇹🇭 ภาษาไทย</button>
+          </div>
+          <div id="lang-active-label" style="margin-top:8px;font-size:11px;color:#888;text-align:center;"></div>
+        </div>
+      </div>
+    </details>
+     <button id="refresh-games-btn" class="sidebar-btn" data-i18n="refresh_games">Refresh Game List</button>
+    <button id="show-installed-btn" class="sidebar-btn" data-i18n="show_installed">Show Installed Only</button>
+    <button id="add-all-btn" class="sidebar-btn" style="display:none;" onclick="window._addAllBtnClick && window._addAllBtnClick()">Unlock<br><span style="font-size:15px;">[Top 5k Games]</span></button>
+  </div>
+
+  <!-- Main content -->
+  <div id="main-content" class="main-content">
+    <div class="app-logo-container"><img src="/logo.png" alt="Shadow Play Logo" class="app-logo"></div>
+    <div class="search-bar">
+      <input id="search" type="search" data-i18n-placeholder="search_placeholder" placeholder="Search by AppID or Game Name..." />
+      <div class="filter-row" id="filter-row">
+        <button id="filter-membership" class="chip" data-i18n="denuvo_games">Denuvo Games</button>
+        <button id="filter-top-downloads" class="chip" data-i18n="top_downloads">Top 20 Downloads</button>
+        <button id="filter-online" class="chip" data-i18n="online_supported">Online Supported</button>
+        <button id="filter-bypass" class="chip" data-i18n="bypass_available">Bypass Available</button>
+        <button id="filter-clear" class="chip subtle" data-i18n="filter_clear">Clear</button>
+        <button id="toggle-genre" class="chip subtle" aria-expanded="false" aria-controls="genre-row" data-i18n="show_genre">Show Genre Filter</button>
+        <div id="genre-row" class="genre-row"></div>
+      </div>
+    </div>
+    <div id="game-grid" class="grid"></div>
+    <div class="pagination">
+      <button id="prev" data-i18n="btn_prev">← Previous</button>
+      <span id="page-label">Page 1 of 1</span>
+      <button id="next" data-i18n="btn_next">Next →</button>
+      <div class="jump-to-page">
+        <input type="number" id="jump-to-page-input" min="1" placeholder="1-100" aria-label="Jump to page number" />
+        <button id="jump-to-page-btn" title="Jump to page" data-i18n="btn_go">Go</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============== MODALS =============== -->
+  <div id="modal-backdrop" class="modal-backdrop"></div>
+  <!-- Activation Modal -->
+  <div id="activation-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="activation-title" aria-describedby="activation-desc" tabindex="-1">
+    <div class="modal-content modal-activation">
+      <div class="act-top">
+        <div class="act-profile">
+          <img id="modal-avatar" class="act-avatar" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100%25' height='100%25' rx='40' ry='40' fill='%23222'/><text x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-family='Arial' font-size='14'>STEAM</text></svg>" alt="Steam avatar" />
+          <div class="act-id">
+            <h2 id="activation-title" class="act-title" data-i18n="activate_title">Activate Application</h2>
+            <div id="modal-persona" class="act-persona">Unknown Steam User</div>
+            <div class="act-steamid"><span class="act-k">SteamID</span><span id="modal-steamid" class="act-v">UNKNOWN</span></div>
+          </div>
+        </div>
+      </div>
+      <p id="activation-desc" class="act-desc" data-i18n="activation_desc">Enter your Shadow Play CD Key to activate for this Steam account. This will bind your Steam ID with the CDKEY.<br>PLEASE ENSURE YOU ARE LOGGING IN USING CORRECT STEAM ACCOUNT. <br>WE WILL NOT ASSIST IF YOU MADE A MISTAKE BINDING THE WRONG ACCOUNT!</p>
+      <label id="modal-cdkey-label" for="modal-cdkey" class="act-label" data-i18n="cdkey_label">CD Key</label>
+      <input id="modal-cdkey" class="act-input" type="text" data-i18n-placeholder="cdkey_placeholder" placeholder="Enter CD Key" autocomplete="off" />
+      <div id="modal-activation-info" class="act-info"></div>
+      <div class="modal-actions act-actions">
+        <button id="modal-confirm" class="btn-confirm" data-i18n="btn_activate">Activate</button>
+        <button id="modal-cancel" class="btn-cancel" data-i18n="btn_cancel">Cancel</button>
+      </div>
+      <p id="modal-feedback" class="feedback act-feedback"></p>
+    </div>
+  </div>
+
+  <!-- Notification Modals -->
+  <div id="download-complete-modal" class="notification-modal" style="display:none;"><div class="notification-content" data-i18n="download_complete">✅ Download Completed</div></div>
+  <div id="loading-modal" class="notification-modal" style="display:none;"><div class="notification-content" id="loading-content" data-i18n="downloading">Downloading... Please wait</div></div>
+  <div id="details-loading-modal" class="notification-modal" style="display:none;"><div class="notification-content" data-i18n="loading_details">Loading game details...</div></div>
+  <div id="remove-complete-modal" class="notification-modal" style="display:none;"><div class="notification-content" style="background:#c62828;" data-i18n="game_removed">❌ Game Removed</div></div>
+
+  <!-- Game Details Modal -->
+  <div id="details-modal"><div id="details-modal-content"><button id="details-modal-close" aria-label="Close details modal">&times;</button><div id="details-modal-img-container"><img id="details-modal-img" src="" alt="Game Cover" /></div><div id="details-modal-body"></div></div></div>
+
+  <!-- Right-Side Popover Menu -->
+  <div id="actions-popover" style="display:none;position:fixed;z-index:10000;">
+    <div id="popover-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.3);"></div>
+    <div id="popover-container" style="position:relative;background:linear-gradient(145deg,#1e2330,#252b3a);border-radius:12px;border:1px solid rgba(255,255,255,0.12);box-shadow:0 12px 40px rgba(0,0,0,0.6);padding:8px;min-width:240px;max-width:280px;">
+      <div id="popover-arrow" style="position:absolute;left:-8px;top:20px;width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent;border-right:8px solid #1e2330;"></div>
+      <div id="popover-buttons" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+  </div>
+
+  <!-- Bulk Download Modal -->
+  <div id="bulk-download-modal" class="modal" style="display:none; align-items:center; justify-content:center;">
+    <div class="notification-content" style="min-width:340px;max-width:95vw;text-align:center;background-color:#222;padding:24px 18px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;">
+      <div><svg style="animation:spin 1s linear infinite;" width="44" height="44" viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" stroke="#4caf50" stroke-width="5" fill="none" opacity="0.12"/><path d="M44 24a20 20 0 1 0-4.65 12.88" fill="none" stroke="#4caf50" stroke-width="5" stroke-linecap="round" stroke-dasharray="60 80"/></svg></div>
+      <progress id="bulk-download-progress" value="0" max="500" style="width:95%;height:16px;border-radius:8px;appearance:none;"></progress>
+      <div id="bulk-download-label" style="font-size:0.99rem;color:#4caf50;"></div>
+      <button id="bulk-cancel-btn" class="btn-cancel" style="margin-top:12px;" data-i18n="btn_cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Bulk AppID Modal -->
+  <div id="bulk-appid-modal" class="modal"><div class="modal-content"><h3 data-i18n="adding_games">Adding your games</h3><p id="bulk-progress-text" data-i18n="starting">Starting...</p><progress id="bulk-progress-bar" value="0" max="100" style="width:100%; height:20px; border-radius: 8px;"></progress><button id="bulk-appidcancel-btn" class="btn-cancel" data-i18n="btn_cancel">Cancel</button></div></div>
+
+  <!-- SteamID Mismatch Modal -->
+  <div id="steamid-mismatch-modal" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="steamid-mismatch-title" style="display:none;">
+    <div class="modal-content modal-pro">
+      <div class="modal-pro__header"><div class="modal-pro__badge" data-i18n="security">Security</div><h2 id="steamid-mismatch-title" class="modal-pro__title" data-i18n="mismatch_title">Steam Account Mismatch</h2><p class="modal-pro__subtitle" data-i18n="mismatch_subtitle">This app is activated for a different Steam account. Please switch to the correct account to continue.</p></div>
+      <div class="modal-pro__grid">
+        <div class="profile-card"><div class="profile-card__label" data-i18n="currently_signed">Currently signed in</div><div class="profile-card__row"><img id="mismatch-current-avatar" class="profile-card__avatar" alt="Current Steam avatar" src="" onerror="this.style.display='none'"><div class="profile-card__meta"><div id="mismatch-current-persona" class="profile-card__name">Unknown Steam User</div><div class="profile-card__sub">SteamID: <span id="current-steamid">UNKNOWN</span></div></div></div></div>
+        <div class="profile-card profile-card--warn"><div class="profile-card__label" data-i18n="activated_for">Activated for</div><div class="profile-card__row"><img id="mismatch-activated-avatar" class="profile-card__avatar" alt="Activated Steam avatar" src="" onerror="this.style.display='none'"><div class="profile-card__meta"><div id="mismatch-activated-persona" class="profile-card__name">Unknown Steam User</div><div class="profile-card__sub">SteamID: <span id="activated-steamid">UNKNOWN</span></div></div></div></div>
+      </div>
+      <div class="modal-pro__note" data-i18n="mismatch_tip">Tip: After switching Steam account, restart the app (or press the button below).</div>
+      <div class="modal-actions modal-pro__actions"><button id="restart-steam-btn-modal" class="sidebar-btn" data-i18n="restart_steam">Restart Steam & Switch Account</button></div>
+    </div>
+  </div>
+
+  <!-- Refresh Game List Modal -->
+  <div id="refresh-list-modal" class="modal"><div class="notification-content" style="min-width:340px; text-align:center;"><div style="margin-bottom:14px;"><svg id="refresh-anim" width="48" height="48" viewBox="0 0 48 48" style="animation:spin 1s linear infinite;"><circle cx="24" cy="24" r="20" stroke="#1976d2" stroke-width="5" fill="none" opacity="0.15"/><path d="M44 24a20 20 0 1 0-4.65 12.88" fill="none" stroke="#1976d2" stroke-width="5" stroke-linecap="round" stroke-dasharray="60 80"/><polyline points="41,34 44,37 47,32" fill="none" stroke="#1976d2" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div style="font-size:1.15rem; margin-bottom:7px; font-weight:bold; color:#1976d2;" data-i18n="refreshing">Refreshing Game List...</div><div style="margin-bottom: 18px; color:#223b61; opacity:0.8;" data-i18n="please_wait">Please wait while we fetch the latest games for you.</div><div style="margin-bottom:8px;"><progress id="refresh-progress-bar" value="0" max="100" style="width:92%; height:16px; border-radius:8px; background:#e3f2fd; accent-color:#1976d2;"></progress></div><div id="refresh-progress-label" style="font-size:0.99rem; color:#1976d2; margin-top:4px; font-weight:500;" data-i18n="starting">Starting...</div></div></div>
+
+  <!-- Custom Confirm Modal -->
+  <div id="custom-confirm-modal" class="modal"><div class="notification-content" style="min-width:400px;text-align:center;"><div id="custom-confirm-msg" style="margin-bottom:10px; font-size:1.1rem;"></div><div style="display:flex;justify-content:center;gap:5px;"><button id="custom-confirm-ok" class="btn-confirm" data-i18n="btn_ok">OK</button><button id="custom-confirm-cancel" class="btn-cancel" data-i18n="btn_cancel">Cancel</button></div></div></div>
+
+  <!-- Cart Review Modal -->
+  <div id="cart-review-modal" class="modal" tabindex="-1" aria-modal="true" style="display:none;">
+    <div class="modal-content cart-modal-content"><h2 style="text-align:center; margin-bottom:16px;" data-i18n="review_cart">🛒 Review Your Cart</h2><div id="cart-list-container"><ul id="cart-list" class="cart-list"></ul><p id="cart-empty-msg" class="cart-empty-msg" data-i18n="cart_empty">Your cart is empty.</p></div><div class="modal-actions cart-modal-actions"><button id="cart-cancel-btn" class="btn-cancel" data-i18n="btn_cancel">Cancel</button><button id="cart-download-btn" class="btn-confirm"><span style="font-weight:600;" data-i18n="download_cart">Download Cart</span>(<span id="cart-modal-count">0</span>)</button></div></div>
+  </div>
+
+  <!-- ✅ UNIFIED GAME DETAIL PANEL - Horizontal: Trailer left, Details+Actions right -->
+  <div id="unified-game-modal" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(6,10,18,0.92);overflow-y:auto;backdrop-filter:blur(6px);">
+    <div id="ugm-container">
+      <button id="ugm-close">&times;</button>
+      <!-- LEFT: Trailer + Screenshots + Description -->
+      <div id="ugm-left">
+        <div id="ugm-trailer-wrap">
+          <div style="position:relative;width:100%;padding-top:56.25%;">
+            <video id="ugm-video" muted loop playsinline style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#000;"></video>
+            <div id="ugm-spinner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;border:3px solid rgba(102,192,244,0.2);border-top-color:#66C0F4;border-radius:50%;animation:tpSpin .8s linear infinite;z-index:10;pointer-events:none;"></div>
+            <div id="ugm-no-trailer" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:rgba(102,192,244,0.5);font-size:13px;">No trailer available</div>
+            <div id="ugm-volume-wrap" style="position:absolute;bottom:8px;right:8px;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.7);border-radius:6px;padding:4px 8px;z-index:20;pointer-events:auto;"><button id="ugm-mute" style="color:#fff;border:none;background:none;cursor:pointer;font-size:13px;padding:0;line-height:1;">🔇</button><input id="ugm-volume" type="range" min="0" max="100" value="30" style="width:70px;height:3px;cursor:pointer;accent-color:#66C0F4;"></div>
+          </div>
+        </div>
+        <!-- Screenshots strip -->
+        <div id="ugm-screenshots"></div>
+        <!-- Description -->
+        <div id="ugm-description" style="padding:12px 16px;font-size:12.5px;color:#a0bdd0;line-height:1.55;"></div>
+      </div>
+      <!-- RIGHT: Cover + Info + Actions -->
+      <div id="ugm-right">
+        <div id="ugm-cover-wrap"><img id="ugm-cover" src="" alt="Cover" /></div>
+        <h2 id="ugm-title"></h2>
+        <div id="ugm-primary-actions"></div>
+        <div id="ugm-price"></div>
+        <div id="ugm-meta"></div>
+        <div id="ugm-actions"></div>
+      </div>
+    </div>
+    <!-- Screenshot lightbox -->
+    <div id="ugm-lightbox">
+      <button id="ugm-lb-close">&times;</button>
+      <button id="ugm-lb-prev">&#8249;</button>
+      <button id="ugm-lb-next">&#8250;</button>
+      <img id="ugm-lb-img" src="" alt="Screenshot" />
+      <div id="ugm-lb-counter"></div>
+    </div>
+
+    <style>
+      #ugm-container {
+        width:min(94vw, 1500px);margin:clamp(4px,1vh,14px) auto;
+        background:linear-gradient(145deg,#0e1621,#131c2b);border-radius:14px;
+        border:1px solid rgba(102,192,244,0.15);overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.8);
+        position:relative;display:flex;flex-direction:row;height:min(98vh, 1080px);
+      }
+      #ugm-close {
+        position:absolute;top:10px;right:10px;z-index:20;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);
+        border:1px solid rgba(255,255,255,0.15);color:#fff;font-size:18px;cursor:pointer;border-radius:50%;
+        width:32px;height:32px;display:flex;align-items:center;justify-content:center;transition:background 0.2s;
+      }
+      #ugm-close:hover { background:rgba(255,60,60,0.7); }
+
+      #ugm-left {
+        flex:1.05;min-width:0;display:flex;flex-direction:column;
+        border-right:1px solid rgba(102,192,244,0.08);overflow-y:auto;
+      }
+      #ugm-trailer-wrap { background:#000;flex-shrink:0; }
+
+      #ugm-right {
+        flex:1.2;
+        min-width:0;
+        display:grid;
+        grid-template-columns:230px 1fr;
+        grid-template-rows:min-content min-content min-content min-content auto;
+        align-content:start;
+        gap:12px 16px;
+        padding:12px 18px 10px;
+        overflow-y:auto;
+      }
+
+      #ugm-cover-wrap {
+        grid-column:1;
+        grid-row:1 / span 4;
+        width:230px;
+        align-self:stretch;
+        background:#0a0e16;
+        border-radius:12px;
+        overflow:hidden;
+        border:1px solid rgba(102,192,244,0.15);
+        display:flex;
+        align-items:flex-start;
+        justify-content:center;
+      }
+      #ugm-cover-wrap img {
+        width:100%;
+        height:auto;
+        max-height:100%;
+        object-fit:contain;
+        display:block;
+      }
+
+      #ugm-title {
+        grid-column:2;
+        grid-row:1;
+        margin:0;
+        font-size:clamp(24px,2vw,38px);
+        font-weight:800;
+        color:#fff;
+        line-height:1.15;
+      }
+
+      #ugm-price {
+        grid-column:2;
+        grid-row:3;
+        font-size:9px;
+        font-weight:400;
+        color:#8ba5be;
+        margin:0;
+        padding-top:2px;
+        line-height:1.5;
+        align-self: start;
+      }
+      #ugm-price *, #ugm-price {
+        font-size:16px !important;
+        font-weight:400 !important;
+      }
+
+      #ugm-meta {
+        grid-column:2;
+        grid-row:4;
+        font-size:16px;
+        color:#b8d3ea;
+        line-height:1.65;
+        padding:10px 0 0;
+        margin:0;
+        border-top:1px solid rgba(102,192,244,0.12);
+        border-bottom:none;
+        align-self: start;
+      }
+
+      #ugm-actions {
+        grid-column: 1 / -1;
+        grid-row: 5;
+        margin-top: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-self: start;
+      }
+
+      #ugm-actions .game-actions-section {
+        display:flex;
+        flex-direction:row;
+        flex-wrap:wrap;
+        gap:8px;
+        padding-top:8px;
+        border-top:1px solid rgba(102,192,244,0.08);
+        align-items:stretch;
+      }
+      #ugm-actions .game-actions-section:first-child { border-top:none;padding-top:0; }
+
+      #ugm-actions .game-actions-section-title {
+        padding-top: 20px
+        grid-column:1 / -1;
+        font-size:11px;
+        text-transform:uppercase;
+        letter-spacing:0.6px;
+        color:#66C0F4;
+        margin-bottom:2px;
+        font-weight:700;
+      }
+
+      #ugm-actions .game-action-btn {
+        flex:1 1 auto;
+        min-width:120px;
+        max-width:220px;
+        min-height:36px;
+        height:36px;
+        padding:4px 14px;
+        border:none;
+        border-radius:7px;
+        font-size:15px;
+        font-weight:800;
+        cursor:pointer;
+        transition:all 0.15s;
+        color:#fff;
+        text-align:center;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        line-height:1;
+        white-space:nowrap;
+      }
+      #ugm-actions .game-action-btn:hover { filter:brightness(1.15);transform:scale(1.03); }
+      #ugm-actions .game-action-btn.primary { background:linear-gradient(135deg,#1976d2,#1565c0); }
+      #ugm-actions .game-action-btn.update { background:linear-gradient(135deg,#f57c00,#e65100); }
+      #ugm-actions .game-action-btn.play { background:linear-gradient(135deg,#2e7d32,#1b5e20); }
+      #ugm-actions .game-action-btn.cart { background:linear-gradient(135deg,#7b1fa2,#6a1b9a); }
+      #ugm-actions .game-action-btn.details { background:linear-gradient(135deg,#00838f,#006064); }
+      #ugm-actions .game-action-btn.patch { background:linear-gradient(135deg,#e65100,#bf360c); }
+      #ugm-actions .game-action-btn.standalone { background:linear-gradient(135deg,#37474f,#263238); }
+      #ugm-actions .game-action-btn.install { background:linear-gradient(135deg,#1565c0,#0d47a1); }
+      #ugm-actions .game-action-btn.danger { background:linear-gradient(135deg,#c62828,#b71c1c); }
+      #ugm-actions .game-action-btn:disabled { opacity:0.5;cursor:not-allowed;transform:none; }
+
+      #ugm-screenshots {
+        display:flex;gap:4px;padding:6px 8px;overflow-x:auto;flex-shrink:0;background:rgba(0,0,0,0.3);
+        scrollbar-width:thin;scrollbar-color:rgba(102,192,244,0.2) transparent;
+      }
+      #ugm-screenshots:empty { display:none; }
+      #ugm-screenshots img {
+        height:110px;width:auto;border-radius:4px;cursor:pointer;opacity:0.7;
+        transition:opacity 0.15s,transform 0.15s,border-color 0.15s;
+        border:2px solid transparent;flex-shrink:0;
+      }
+      #ugm-screenshots img:hover { opacity:1;transform:scale(1.09);border-color:#66C0F4; }
+      #ugm-screenshots::-webkit-scrollbar { height:4px; }
+      #ugm-screenshots::-webkit-scrollbar-thumb { background:rgba(102,192,244,0.25);border-radius:2px; }
+
+      #ugm-description {
+        padding:14px 16px;
+        font-size:13px !important;
+        color:#a0bdd0;
+        line-height:1.7;
+      }
+
+      #ugm-lightbox {
+        display:none;position:fixed;inset:0;z-index:10010;background:rgba(0,0,0,0.96);
+        align-items:center;justify-content:center;
+      }
+      #ugm-lightbox.show { display:flex; }
+      #ugm-lb-img { max-width:92vw;max-height:88vh;object-fit:contain;border-radius:6px;user-select:none; }
+      #ugm-lb-close {
+        position:absolute;top:14px;right:18px;background:none;border:none;color:#fff;font-size:32px;
+        cursor:pointer;opacity:0.7;transition:opacity 0.2s;z-index:10;
+      }
+      #ugm-lb-close:hover { opacity:1; }
+      #ugm-lb-prev, #ugm-lb-next {
+        position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.08);
+        border:none;color:#fff;font-size:32px;cursor:pointer;padding:14px 18px;border-radius:10px;
+        opacity:0.5;transition:opacity 0.2s,background 0.2s;z-index:10;
+      }
+      #ugm-lb-prev { left:14px; }
+      #ugm-lb-next { right:14px; }
+      #ugm-lb-prev:hover, #ugm-lb-next:hover { opacity:1;background:rgba(255,255,255,0.15); }
+      #ugm-lb-counter {
+        position:absolute;bottom:18px;left:50%;transform:translateX(-50%);
+        color:rgba(255,255,255,0.5);font-size:13px;
+      }
+
+      #unified-game-modal { scrollbar-width:thin;scrollbar-color:rgba(102,192,244,0.3) transparent; }
+      #ugm-right::-webkit-scrollbar, #ugm-left::-webkit-scrollbar { width:5px; }
+      #ugm-right::-webkit-scrollbar-thumb, #ugm-left::-webkit-scrollbar-thumb { background:rgba(102,192,244,0.3);border-radius:3px; }
+
+      @media (min-width:1400px) {
+        #ugm-container { width:min(92vw,1600px);height:min(98vh,1120px); }
+        #ugm-title { font-size:34px; }
+        #ugm-price { font-size:32px; }
+        #ugm-meta { font-size:15px; }
+        #ugm-screenshots img { height:110px; }
+        #ugm-actions .game-action-btn { font-size:15px; }
+      }
+
+      @media (max-width:980px) {
+        #ugm-container {
+          flex-direction:column;
+          width:95vw;
+          margin:10px auto;
+          height:auto;
+          max-height:95vh;
+        }
+        #ugm-left { border-right:none;border-bottom:1px solid rgba(102,192,244,0.08); }
+        #ugm-right {
+          min-width:0;
+          grid-template-columns:170px 1fr;
+          grid-template-rows:auto auto auto auto auto;
+          gap:10px 12px;
+        }
+        #ugm-primary-actions {
+          display:block;
+          overflow:visible;
+          padding-bottom:10px;
+        }
+        #ugm-primary-actions .game-actions-section {
+          display:flex !important;
+          flex-direction:row !important;
+          flex-wrap:wrap !important;
+          width:100%;
+          gap:8px !important;
+        }
+        #ugm-primary-actions .game-action-btn {
+          min-width:70px !important;
+          max-width:none !important;
+          flex:1 1 auto !important;
+          font-size:12px !important;
+          padding:7px 8px !important;
+        }
+        #ugm-cover-wrap { width:170px; }
+        #ugm-title { font-size:24px; }
+        #ugm-price { font-size:9px !important; }
+        #ugm-meta { font-size:14px; }
+      }
+
+      @media (max-width:700px) {
+        #ugm-right {
+          display:flex;
+          flex-direction:column;
+          min-width:0;
+        }
+        #ugm-cover-wrap {
+          width:100%;
+          max-width:200px;
+          max-height:280px;
+          align-self:center;
+          order:1;
+        }
+        #ugm-title { order:2; }
+        #ugm-primary-actions {
+          order:3;
+          display:block;
+          width:100%;
+          overflow:visible;
+          padding-bottom:10px;
+          border-bottom:1px solid rgba(102,192,244,0.15);
+          margin-bottom:4px;
+        }
+        #ugm-primary-actions .game-actions-section {
+          display:flex !important;
+          flex-direction:row !important;
+          flex-wrap:wrap !important;
+          width:100%;
+          gap:8px !important;
+        }
+        #ugm-primary-actions .game-action-btn {
+          min-width:100px !important;
+          flex:1 1 auto !important;
+          white-space:normal !important;
+          height:auto !important;
+          min-height:36px !important;
+          padding:8px 10px !important;
+          font-size:12px !important;
+        }
+        #ugm-price {
+          order:4;
+          width:100%;
+          margin-top:0;
+          padding-top:6px;
+        }
+        #ugm-meta { order:5; }
+        #ugm-actions {
+          order:6;
+          width:100%;
+        }
+        #ugm-actions .game-actions-section{
+          grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+        }
+        #ugm-actions .game-action-btn {
+          white-space:normal;
+          min-height:40px;
+          height:auto;
+          padding:8px 10px;
+        }
+      }
+
+      #custom-confirm-modal {
+        position: fixed !important;
+        inset: 0 !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+
+        width: 100vw !important;
+        max-width: 100vw !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+
+        margin: 0 !important;
+        padding: 24px !important;
+        border: none !important;
+        border-radius: 0 !important;
+        background: rgba(4, 10, 22, 0.58) !important;
+        box-shadow: none !important;
+        overflow: hidden !important;
+
+        transform: none !important;
+
+        display: none !important;
+        align-items: center !important;
+        justify-content: center !important;
+        z-index: 30000 !important;
+        backdrop-filter: blur(6px);
+      }
+
+      #custom-confirm-modal.show {
+        display: flex !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        background: rgba(4, 10, 22, 0.58) !important;
+      }
+
+      #custom-confirm-modal .notification-content {
+        width: min(92vw, 560px) !important;
+        max-width: 560px !important;
+        min-width: 320px !important;
+        margin: 0 auto !important;
+        padding: 20px 20px 16px !important;
+        text-align: center !important;
+
+        background: linear-gradient(145deg, #0f1524, #101828 58%, #0d1320) !important;
+        border: 1px solid rgba(102,192,244,0.18) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 24px 80px rgba(0,0,0,0.55) !important;
+        color: #eef7ff !important;
+      }
+
+      #custom-confirm-msg {
+        margin-bottom: 18px !important;
+        font-size: 14px !important;
+        line-height: 1.6 !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+      }
+
+      #custom-confirm-modal .notification-content > div:last-child {
+        display: flex !important;
+        justify-content: center !important;
+        gap: 12px !important;
+      }
+
+      #ugm-primary-actions {
+        grid-column: 2;
+        grid-row: 2;
+        display: block;
+        overflow: visible;
+        padding-bottom: 12px;
+        margin-bottom: 4px;
+        border-bottom: 1px solid rgba(102,192,244,0.15);
+        align-self: start;
+        width: 100%;
+      }
+      #ugm-primary-actions .game-actions-section-title { display: none !important; }
+      #ugm-primary-actions .game-actions-section {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        border-top: none !important;
+        padding-top: 0 !important;
+        gap: 8px !important;
+        width: 100%;
+      }
+      #ugm-primary-actions .game-action-btn {
+        flex: 1 1 auto !important;
+        min-width: 90px !important;
+        max-width: 180px !important;
+        font-size: clamp(11px,1.2vw,13px) !important;
+        padding: 8px 10px !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        white-space: nowrap !important;
+      }
+
+    </style>
+
+  </div>
+
+
+  <!-- ✅ RESPONSIVE TRAILER POPUP - Fixed sizing & behavior -->
+  <div id="trailer-popup" style="position:fixed;z-index:9999;display:none;max-width:min(720px, 35vw);width:35%;background:#0e1621;border:1px solid rgba(102,192,244,0.3);border-radius:10px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.7);pointer-events:auto;">
+    <div id="tp-title" style="padding:8px 12px;font-size:12px;font-weight:600;color:#66C0F4;background:rgba(102,192,244,0.08);border-bottom:1px solid rgba(102,192,244,0.15);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+    <!-- Video container with 16:9 aspect ratio using padding-top trick -->
+    <div style="position:relative;width:100%;padding-top:56.25%;">
+      <video id="tp-video" muted loop playsinline style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:auto;"></video>
+      <div id="tp-spinner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:32px;height:32px;border:3px solid rgba(102,192,244,0.2);border-top-color:#66C0F4;border-radius:50%;animation:tpSpin .8s linear infinite;z-index:10;pointer-events:none;"></div>
+      <!-- Mute Toggle Button -->
+      <div id="tp-volume-wrap" style="position:absolute;bottom:8px;right:8px;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.7);border-radius:4px;padding:3px 8px;z-index:20;"><button id="tp-mute-btn" style="color:#fff;border:none;background:none;cursor:pointer;font-size:14px;padding:0;line-height:1;">🔇</button><input id="tp-volume" type="range" min="0" max="100" value="30" style="width:70px;height:3px;cursor:pointer;accent-color:#66C0F4;"></div>
+    </div>
+    <style>@keyframes tpSpin{to{transform:translate(-50%,-50%) rotate(360deg)}}</style>
+  </div>
+
+  <!-- Oneshot Install Modal -->
+  <div id="oneshot-install-modal" class="modal" style="display:none;z-index:9999;"><div class="modal-content" style="min-width:320px;max-width:90vw;"><h2 data-i18n="installing">Installing Oneshot Package…</h2><progress id="oneshot-install-progress" value="0" max="100" style="width:100%;height:20px;"></progress><div id="oneshot-install-label" style="margin-top:10px;color:#7cf;font-size:1.08rem;" data-i18n="preparing">Preparing…</div></div></div>
+
+  <!-- Changelog Modal -->
+  <div id="changelog-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:20000;background:rgba(30,40,55,0.96);align-items:center;justify-content:center;"><div style="max-width:900px;width:90vw;margin:50px auto;background:#222b38;border-radius:10px;box-shadow:0 0 30px #000a;padding:24px 36px;position:relative;"><button id="close-changelog-btn" style="position:absolute;top:16px;right:18px;font-size:20px;background:none;border:none;color:#aaa;cursor:pointer;">&times;</button><h2 style="text-align:center;font-size:1.5em;margin-bottom:12px;color:#fff;" data-i18n="changelog">Changelog</h2><div id="changelog-content" style="max-height:540px;overflow:auto;color:#dadada;padding-right:4px;"></div></div></div>
+
+  <!-- General Notification Modal -->
+  <div id="notification-modal" class="notification-modal" style="display:none;"><div class="notification-content" id="notification-content" style="min-width:320px; text-align:center;"></div></div>
+
+  <!-- Parental Control PIN Modal -->
+  <div id="pc-pin-modal" class="modal" role="dialog" aria-modal="true" style="display:none;"><div class="modal-content" style="max-width:420px;"><h2 id="pc-pin-title" style="margin-bottom:8px;" data-i18n="set_pin">Set Parental PIN</h2><p id="pc-pin-desc" style="opacity:.85;margin-bottom:12px;" data-i18n="create_pin">Create a 4–8 digit PIN.</p><div id="pc-pin-setup-fields"><label for="pc-pin-input" style="display:block;margin:6px 0 4px;" data-i18n="pin_label">PIN</label><input id="pc-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /><label for="pc-pin-confirm" style="display:block;margin:12px 0 4px;" data-i18n="confirm_pin">Confirm PIN</label><input id="pc-pin-confirm" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /></div><div id="pc-pin-unlock-fields" style="display:none;"><label for="pc-pin-unlock" style="display:block;margin:6px 0 4px;" data-i18n="enter_pin">Enter PIN to turn off</label><input id="pc-pin-unlock" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /></div><p id="pc-pin-error" class="feedback" style="color:#ff6b6b;min-height:20px;margin-top:8px;"></p><div class="modal-actions" style="margin-top:12px;"><button id="pc-pin-ok" class="btn-confirm" data-i18n="btn_ok">OK</button><button id="pc-pin-cancel" class="btn-cancel" data-i18n="btn_cancel">Cancel</button></div></div></div>
+
+  <!-- Game Actions Modal -->
+  <div id="game-actions-modal" class="game-actions-modal" style="display:none;"><div class="modal-content game-actions-content"><button id="game-actions-close" class="game-actions-close" aria-label="Close">&times;</button><div class="game-actions-header"><img id="game-actions-cover" class="game-actions-cover" alt="Game Cover" /><div class="game-actions-info"><h2 id="game-actions-title" class="game-actions-title">Game Title</h2><div id="game-actions-appid" class="game-actions-appid">AppID: 000000</div><div id="game-actions-size" class="game-actions-size">Size: N/A</div><div id="game-actions-downloads" class="game-actions-downloads">Downloads: 0</div></div></div><div class="game-actions-body" id="game-actions-body"></div></div></div>
+
+  <!-- Denuvo Warning Modal -->
+  <div id="denuvo-warning-modal" class="modal" role="alertdialog" aria-modal="true" style="display:none;width:auto !important;max-width:95vw !important;padding:0 !important;overflow:hidden !important;max-height:none !important;"><div class="denuvo-warning-content" style="width:auto;max-width:680px;min-width:320px;box-sizing:border-box;max-height:90vh;overflow-y:auto;overflow-x:hidden;"><div class="denuvo-warning-header"><div class="denuvo-warning-icon">⚠️</div><h2 class="denuvo-warning-title">Account Required</h2><h3 class="denuvo-warning-title-malay">ต้องการบัญชี</h3></div><div class="denuvo-warning-body"><div class="denuvo-warning-message"><p class="denuvo-warning-text-en"><strong>THIS IS DENUVO PROTECTED GAME AND WOULD REQUIRE AN ACCOUNT FROM SELLER FOR ACTIVATION</strong></p><ul class="denuvo-warning-list"><li>You will receive login credentials from the seller</li><li>Account sharing required for activation</li><li>1. Click Enable Auto Update in Shadow Play +</li><li>2. Close Shadow Play +</li><li>3. Login to seller account, play until main menu</li><li>4. Logout from seller account and login to your own account to play the game</li></ul></div><div class="denuvo-warning-message denuvo-warning-malay"><p class="denuvo-warning-text-my"><strong>เกมนี้ถูกป้องกันด้วย DENUVO และต้องใช้บัญชีจากผู้ขายเพื่อเปิดใช้งาน</strong></p><ul class="denuvo-warning-list"><li>คุณจะได้รับข้อมูลการเข้าสู่ระบบจากผู้ขาย</li><li>ต้องแชร์บัญชีเพื่อเปิดใช้งาน</li><li>1. คลิก Enable Auto Update ใน Shadow Play +</li><li>2. ปิด Shadow Play +</li><li>3. เข้าสู่ระบบด้วยบัญชีของผู้ขาย เล่นจนถึง "main menu"</li><li>4. ออกจากระบบบัญชีผู้ขาย แล้วเข้าสู่ระบบด้วยบัญชีของคุณเองเพื่อเล่นเกม</li></ul></div></div><div class="denuvo-warning-game-info"><img id="denuvo-warning-cover" class="denuvo-warning-cover" src="" alt="Game Cover" /><div class="denuvo-warning-details"><div id="denuvo-warning-game-name" class="denuvo-warning-game-name">Game Name</div><div id="denuvo-warning-tags" class="denuvo-warning-tags"></div></div></div><div class="modal-actions denuvo-warning-actions"><button id="denuvo-warning-cancel" class="btn-cancel">Cancel / ยกเลิก</button><button id="denuvo-warning-proceed" class="btn-confirm denuvo-warning-proceed-btn">I Understand, Proceed / เข้าใจแล้ว ดำเนินการต่อ</button></div></div></div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="/main.js"></script>
+
+  <!-- Theme label fix script -->
+  <script>
+  setInterval(function(){
+    var l=document.getElementById('theme-active-label');
+    if(l&&l.textContent.indexOf('Indigo Galaxy')===-1){
+      l.textContent=l.textContent.replace(/🧧?\s*Chinese New Year/g,'💜 Indigo Galaxy').replace(/🧧?\s*Tahun Baru Cina/g,'💜 Indigo Galaxy').replace(/🧧?\s*Tahun Baru Cino/g,'💜 Indigo Galaxy').replace(/🧧?\s*农历新年/g,'💜 Indigo Galaxy');
+    }
+    if(typeof TRANSLATIONS!=='undefined'){['en','zh','th'].forEach(function(k){if(TRANSLATIONS[k])TRANSLATIONS[k].theme_cny='💜 Indigo Galaxy';});}
+  },300);
+  </script>
+
+  <!-- ✅ UNIFIED GAME DETAIL PANEL LOGIC -->
+  <script>
+  (function() {
+    var ugmHls = null;
+    var ugmOpen = false;
+    var lbScreenshots = [];
+    var lbIndex = 0;
+
+    // Lightbox
+    function openLightbox(index) {
+      if (!lbScreenshots.length) return;
+      lbIndex = index;
+      var lb = document.getElementById('ugm-lightbox');
+      var img = document.getElementById('ugm-lb-img');
+      var counter = document.getElementById('ugm-lb-counter');
+      if (img) img.src = lbScreenshots[lbIndex];
+      if (counter) counter.textContent = (lbIndex + 1) + ' / ' + lbScreenshots.length;
+      if (lb) lb.classList.add('show');
+    }
+    function closeLightbox() {
+      var lb = document.getElementById('ugm-lightbox');
+      if (lb) lb.classList.remove('show');
+    }
+    function lbNav(dir) {
+      lbIndex = (lbIndex + dir + lbScreenshots.length) % lbScreenshots.length;
+      var img = document.getElementById('ugm-lb-img');
+      var counter = document.getElementById('ugm-lb-counter');
+      if (img) img.src = lbScreenshots[lbIndex];
+      if (counter) counter.textContent = (lbIndex + 1) + ' / ' + lbScreenshots.length;
+    }
+    // Lightbox event listeners
+    document.addEventListener('DOMContentLoaded', function() {
+      var lbc = document.getElementById('ugm-lb-close');
+      var lbp = document.getElementById('ugm-lb-prev');
+      var lbn = document.getElementById('ugm-lb-next');
+      var lbx = document.getElementById('ugm-lightbox');
+      if (lbc) lbc.onclick = closeLightbox;
+      if (lbp) lbp.onclick = function() { lbNav(-1); };
+      if (lbn) lbn.onclick = function() { lbNav(1); };
+      if (lbx) lbx.onclick = function(e) { if (e.target === lbx) closeLightbox(); };
+    });
+    document.addEventListener('keydown', function(e) {
+      var lb = document.getElementById('ugm-lightbox');
+      if (!lb || !lb.classList.contains('show')) return;
+      if (e.key === 'Escape') closeLightbox();
+      if (e.key === 'ArrowLeft') lbNav(-1);
+      if (e.key === 'ArrowRight') lbNav(1);
+    });
+
+    function ugmCleanup() {
+      var video = document.getElementById('ugm-video');
+      if (ugmHls) { ugmHls.destroy(); ugmHls = null; }
+      if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
+      ugmOpen = false;
+    }
+
+    function closeUnifiedPanel() {
+      var modal = document.getElementById('unified-game-modal');
+      if (modal) modal.style.display = 'none';
+      closeLightbox();
+      ugmCleanup();
+      document.body.classList.remove('modal-open');
+    }
+
+    window.closeUnifiedGamePanel = closeUnifiedPanel;
+
+    // HLS playback — same approach as the working hover trailer
+    function ugmPlayHLS(url) {
+      var video = document.getElementById('ugm-video');
+      var spinner = document.getElementById('ugm-spinner');
+      var noTrailer = document.getElementById('ugm-no-trailer');
+      if (!video) return;
+      if (ugmHls) { ugmHls.destroy(); ugmHls = null; }
+
+      ugmHls = new Hls({ enableWorker: true, lowLatencyMode: false, maxBufferLength: 10 });
+      ugmHls.loadSource(url);
+      ugmHls.attachMedia(video);
+      ugmHls.on(Hls.Events.MANIFEST_PARSED, function() {
+        setTimeout(function() {
+          if (ugmOpen) video.play().catch(function(e) { console.log('UGM play error:', e.message); });
+        }, 100);
+      });
+      ugmHls.on(Hls.Events.FRAG_LOADED, function() { if (spinner) spinner.style.display = 'none'; });
+      ugmHls.on(Hls.Events.BUFFER_APPENDING, function() { if (spinner) spinner.style.display = 'none'; });
+      ugmHls.on(Hls.Events.ERROR, function(ev, data) {
+        if (data.details && data.details.indexOf('audio') !== -1) return;
+        if (data.fatal) {
+          if (spinner) spinner.style.display = 'none';
+          if (noTrailer) { noTrailer.textContent = 'Trailer unavailable'; noTrailer.style.display = 'block'; }
+        }
+      });
+      setTimeout(function() { if (spinner) spinner.style.display = 'none'; }, 4000);
+    }
+
+    window.openUnifiedGamePanel = function(game, launcherStatus) {
+      var modal = document.getElementById('unified-game-modal');
+      if (!modal) return;
+
+      ugmCleanup();
+      ugmOpen = true;
+      modal.style.display = 'block';
+      document.body.classList.add('modal-open');
+
+      var video = document.getElementById('ugm-video');
+      var spinner = document.getElementById('ugm-spinner');
+      var noTrailer = document.getElementById('ugm-no-trailer');
+      var muteBtn = document.getElementById('ugm-mute');
+      var cover = document.getElementById('ugm-cover');
+      var titleEl = document.getElementById('ugm-title');
+      var metaEl = document.getElementById('ugm-meta');
+      var priceEl = document.getElementById('ugm-price');
+      var descEl = document.getElementById('ugm-description');
+      var actionsEl = document.getElementById('ugm-actions');
+
+      if (spinner) spinner.style.display = 'block';
+      if (noTrailer) noTrailer.style.display = 'none';
+
+      // Reset screenshots
+      lbScreenshots = [];
+      var ssEl = document.getElementById('ugm-screenshots');
+      if (ssEl) ssEl.innerHTML = '';
+
+      // Set basic info immediately
+      if (titleEl) titleEl.textContent = game.name || 'Unknown';
+      if (metaEl) metaEl.innerHTML = 'AppID: ' + game.appid + '&ensp;|&ensp;Loading...';
+      if (priceEl) priceEl.textContent = '';
+      if (descEl) descEl.textContent = '';
+
+      // Cover: try multiple CDN URLs in sequence, API image as final fallback
+      if (cover) {
+        cover._ugmLoaded = false;
+        cover._ugmExhausted = false;
+
+        var coverUrls = [
+          'https://steamcdn-a.akamaihd.net/steam/apps/' + game.appid + '/library_600x900.jpg',
+          'https://raw.githubusercontent.com/barryhamsy/gamelist/main/' + game.appid + '.jpg'
+        ];
+
+        var coverIdx = 0;
+
+        cover.onload = function() {
+          cover._ugmLoaded = true;
+          cover.style.objectFit = 'contain';
+        };
+
+        cover.onerror = function() {
+          coverIdx++;
+          if (coverIdx < coverUrls.length) {
+            cover.src = coverUrls[coverIdx];
+          } else {
+            cover._ugmExhausted = true;
+            cover.onerror = null;
+          }
+        };
+
+        cover.src = coverUrls[0];
+      }
+
+      // Build action buttons
+      var primaryActionsEl = document.getElementById('ugm-primary-actions');
+      if (actionsEl) {
+        actionsEl.innerHTML = '';
+        if (primaryActionsEl) primaryActionsEl.innerHTML = '';
+        if (window.__buildGameActionButtons) {
+          window.__buildGameActionButtons(game, launcherStatus, actionsEl, primaryActionsEl || undefined);
+          actionsEl.querySelectorAll('.game-action-btn.details').forEach(function(btn) { btn.remove(); });
+          if (primaryActionsEl) primaryActionsEl.querySelectorAll('.game-action-btn.details').forEach(function(btn) { btn.remove(); });
+        }
+      }
+
+      // Mute toggle + volume
+      if (muteBtn && video) {
+        var ugmVolSlider = document.getElementById('ugm-volume');
+        var ugmSavedVol = parseFloat(localStorage.getItem('trailer_volume') || '0.3');
+        video.volume = ugmSavedVol;
+        video.muted = false;
+        function syncUgmVol() {
+          muteBtn.textContent = video.muted ? '🔇' : '🔊';
+          if (ugmVolSlider) ugmVolSlider.value = video.muted ? 0 : Math.round(video.volume * 100);
+        }
+        if (ugmVolSlider) {
+          ugmVolSlider.value = Math.round(ugmSavedVol * 100);
+          ugmVolSlider.oninput = function() {
+            var v = parseInt(this.value) / 100;
+            video.volume = v;
+            video.muted = v === 0;
+            localStorage.setItem('trailer_volume', String(v));
+            syncUgmVol();
+          };
+        }
+        muteBtn.onclick = function(e) {
+          e.preventDefault(); e.stopPropagation();
+          video.muted = !video.muted;
+          if (!video.muted) { var sv = parseFloat(localStorage.getItem('trailer_volume') || '0.3'); video.volume = sv || 0.3; }
+          syncUgmVol();
+          if (!video.muted && video.paused) video.play().catch(function(){});
+        };
+        syncUgmVol();
+      }
+
+      // Video events
+      if (video) {
+        video.onplaying = function() { if (spinner) spinner.style.display = 'none'; };
+        video.oncanplay = function() { if (spinner) spinner.style.display = 'none'; };
+        video.onerror = function() {
+          if (spinner) spinner.style.display = 'none';
+          if (noTrailer) { noTrailer.textContent = 'Trailer unavailable'; noTrailer.style.display = 'block'; }
+        };
+      }
+
+      // Fetch Store API for trailer + details
+      fetch('/api/steamstore/' + game.appid + '?cc=th&l=en')
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+          if (!ugmOpen) return;
+          var gd = data && data[String(game.appid)];
+          var sg = gd && gd.data;
+
+          // Details
+          if (sg && metaEl) {
+            if (cover && !cover._ugmLoaded && cover._ugmExhausted) {
+              var apiImg = sg.capsule_imagev5 || sg.capsule_image || sg.header_image || null;
+              if (apiImg) {
+                cover.onerror = function() {
+                  cover.src = '/static/placeholder.jpg';
+                  cover.onerror = null;
+                };
+                cover.src = apiImg;
+              } else {
+                cover.src = '/static/placeholder.jpg';
+              }
+            }
+
+            var dev = (sg.developers || []).join(', ') || 'N/A';
+            var pub = (sg.publishers || []).join(', ') || 'N/A';
+            var rel = (sg.release_date && sg.release_date.date) || 'N/A';
+            var langs = 'N/A';
+            if (sg.supported_languages) {
+              langs = sg.supported_languages.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+              if (langs.length > 80) langs = langs.substring(0, 80) + '…';
+            }
+            var rev = (sg.metacritic && sg.metacritic.score) ? sg.metacritic.score + ' (Metacritic)' : '';
+
+            metaEl.innerHTML =
+              '<b style="color:#66C0F4">AppID:</b> ' + game.appid +
+              ' &ensp;|&ensp; <b style="color:#66C0F4">Release:</b> ' + rel +
+              '<br><b style="color:#66C0F4">Developer:</b> ' + dev +
+              '<br><b style="color:#66C0F4">Publisher:</b> ' + pub +
+              '<br><b style="color:#66C0F4">Size:</b> ' + (game.size_gb || 'N/A') +
+              ' &ensp;|&ensp; <b style="color:#66C0F4">Downloads:</b> ' + (game.downloads || 0) +
+              (rev ? '<br><b style="color:#66C0F4">Review:</b> ' + rev : '') +
+              '<br><b style="color:#66C0F4">Languages:</b> ' + langs;
+          }
+
+          // Price
+          if (sg && priceEl) {
+            if (sg.is_free) {
+              priceEl.textContent = 'or play for free on Steam';
+            } else if (sg.price_overview) {
+              var p = sg.price_overview;
+              var priceLabel = p.final_formatted || '';
+              var priceDisplay = '';
+              if (p.discount_percent > 0) {
+                priceDisplay = '<s style="opacity:0.5">' + (p.initial_formatted||'') + '</s> <span style="color:#66C0F4">' + priceLabel + '</span> <span style="color:#4caf50">(-' + p.discount_percent + '%)</span>';
+              } else {
+                priceDisplay = '<span style="color:#8ec8f0">' + priceLabel + '</span>';
+              }
+              priceEl.innerHTML = 'or buy from Steam for ' + priceDisplay;
+            }
+          }
+
+          // Description (on left side, below trailer)
+          if (sg && sg.short_description && descEl) {
+            descEl.innerHTML = sg.short_description +
+              '<div style="margin-top:8px;">' +
+              '<a href="#" id="ugm-open-steam-store" style="color:#66C0F4;font-size:11px;text-decoration:none;opacity:0.7;">View on Steam Store ↗</a>' +
+              '</div>';
+
+            setTimeout(() => {
+              const link = document.getElementById('ugm-open-steam-store');
+              if (!link) return;
+
+              link.onclick = async (e) => {
+                e.preventDefault();
+
+                try {
+                  // use native API if available (no browser prompt)
+                  if (window.pywebview?.api?.open_steam_store) {
+                    await window.pywebview.api.open_steam_store(Number(game.appid));
+                  } else {
+                    // fallback — use Flask endpoint to open in Steam client (no prompt)
+                    fetch('/api/open_steam_store/' + game.appid, { method: 'POST' });
+                  }
+                } catch (err) {
+                  console.error('Steam store open failed:', err);
+                }
+              };
+            }, 0);
+          }
+
+          // Screenshots
+          if (sg && sg.screenshots && sg.screenshots.length) {
+            var ssContainer = document.getElementById('ugm-screenshots');
+            if (ssContainer) {
+              ssContainer.innerHTML = '';
+              lbScreenshots = [];
+              sg.screenshots.forEach(function(ss, idx) {
+                lbScreenshots.push(ss.path_full);
+                var thumb = document.createElement('img');
+                thumb.src = ss.path_thumbnail;
+                thumb.alt = 'Screenshot ' + (idx + 1);
+                thumb.onclick = function() { openLightbox(idx); };
+                ssContainer.appendChild(thumb);
+              });
+            }
+          }
+
+          // Trailer — use same logic as the working hover trailer
+          if (!sg || !sg.movies || !sg.movies.length) {
+            if (spinner) spinner.style.display = 'none';
+            if (noTrailer) noTrailer.style.display = 'block';
+            return;
+          }
+
+          var movie = sg.movies[0];
+          var hlsUrl = movie.hls_h264 || movie.hls || null;
+          var mp4Url = (movie.mp4 && (movie.mp4.max || movie.mp4['480'])) || (movie.webm && (movie.webm.max || movie.webm['480'])) || null;
+
+          if (hlsUrl && typeof Hls !== 'undefined' && Hls.isSupported()) {
+            ugmPlayHLS(hlsUrl);
+          } else if (mp4Url) {
+            video.src = '/api/video_proxy?url=' + encodeURIComponent(mp4Url);
+            video.play().catch(function(){});
+          } else {
+            if (spinner) spinner.style.display = 'none';
+            if (noTrailer) noTrailer.style.display = 'block';
+          }
+        })
+        .catch(function(e) {
+          console.error('UGM fetch error:', e);
+          if (spinner) spinner.style.display = 'none';
+          if (noTrailer) noTrailer.style.display = 'block';
+        });
+    };
+
+    // Close handlers
+    document.addEventListener('DOMContentLoaded', function() {
+      var closeBtn = document.getElementById('ugm-close');
+      if (closeBtn) closeBtn.addEventListener('click', closeUnifiedPanel);
+      var modal = document.getElementById('unified-game-modal');
+      if (modal) modal.addEventListener('click', function(e) { if (e.target === modal) closeUnifiedPanel(); });
+    });
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && ugmOpen) closeUnifiedPanel(); });
+  })();
+  </script>
+
+  <!-- ✅ COMPLETE TRAILER SCRIPT - All fixes applied -->
+  <script>
+  (function(){
+    const popup = document.getElementById('trailer-popup');
+    const video = document.getElementById('tp-video');
+    const title = document.getElementById('tp-title');
+    const spinner = document.getElementById('tp-spinner');
+    const muteBtn = document.getElementById('tp-mute-btn');
+    let hls = null, currentAppid = null, hoverTimer = null, spinnerHideTimeout = null;
+    let popupHovered = false;
+    let hideTimeout = null;
+
+    // === CONFIG ===
+    const DELAY = 1200;        // 1.2s delay before showing trailer
+    const HIDE_DELAY = 1200;   // 4s delay before hiding after mouse leaves
+
+    // === SCROLL DETECTION ===
+    let isScrolling = false;
+    let scrollTimer = null;
+    window.addEventListener('scroll', function() {
+      isScrolling = true;
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => { isScrolling = false; }, 150);
+      popupHovered = false;
+      hideTrailer();
+    }, { passive: true });
+    const gameGrid = document.getElementById('game-grid');
+    if (gameGrid) {
+      gameGrid.addEventListener('scroll', function() {
+        isScrolling = true;
+        clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(() => { isScrolling = false; }, 150);
+        popupHovered = false;
+        hideTrailer();
+      }, { passive: true });
+    }
+
+    function hideSpinner() {
+      if (spinner && spinner.style.display !== 'none') spinner.style.display = 'none';
+      if (spinnerHideTimeout) { clearTimeout(spinnerHideTimeout); spinnerHideTimeout = null; }
+    }
+    function clearHideTimeout() { if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; } }
+    function scheduleHide() { clearHideTimeout(); hideTimeout = setTimeout(hideTrailer, HIDE_DELAY); }
+
+    function showTrailer(appid, name, card) {
+      if (isScrolling) return;
+      clearHideTimeout();
+      currentAppid = appid;
+      title.textContent = name || appid;
+      spinner.style.display = 'block';
+      popup.style.display = 'block';
+      popup.style.opacity = '1';
+      popup.style.transition = 'opacity 0.3s ease-in';
+      positionPopup(card);
+      if (spinnerHideTimeout) clearTimeout(spinnerHideTimeout);
+      if (muteBtn) muteBtn.textContent = '🔇';
+
+      fetch('/api/steamstore/' + appid + '?cc=th&l=en')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (currentAppid !== appid) return;
+          const game = data?.[appid]?.data;
+          const movie = game?.movies?.[0];
+          if (!movie) { hideTrailer(); title.textContent = (name||appid) + ' - No trailer'; return; }
+          const hlsUrl = movie.hls_h264 || movie.hls;
+          const mp4Url = movie.mp4?.max || movie.mp4?.['480'] || movie.webm?.max;
+          if (hlsUrl && Hls?.isSupported()) { playHLS(hlsUrl); }
+          else if (mp4Url) { video.src = '/api/video_proxy?url=' + encodeURIComponent(mp4Url); video.play().catch(()=>{}); }
+          else { hideTrailer(); title.textContent = (name||appid) + ' - No trailer'; }
+        })
+        .catch(() => { hideTrailer(); });
+    }
+
+    function playHLS(url) {
+      if (hls) hls.destroy();
+      hls = new Hls({ enableWorker: true, lowLatencyMode: false, maxBufferLength: 10 });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => { setTimeout(() => { if (currentAppid) video.play().catch((e)=>console.log('HLS play error:',e.message)); }, 100); });
+      hls.on(Hls.Events.FRAG_LOADED, hideSpinner);
+      hls.on(Hls.Events.BUFFER_APPENDING, hideSpinner);
+      hls.on(Hls.Events.ERROR, (ev, data) => { if (data.fatal) { hideSpinner(); title.textContent = 'Trailer unavailable'; } });
+      spinnerHideTimeout = setTimeout(hideSpinner, 3000);
+    }
+
+    // Native video events
+    video.onplaying = hideSpinner;
+    video.onloadeddata = hideSpinner;
+    video.oncanplay = hideSpinner;
+    video.onerror = function() { hideSpinner(); title.textContent = 'Trailer unavailable'; };
+
+    // Mute toggle + volume
+    function setupMuteToggle() {
+      if (!muteBtn || !video) return;
+      var tpVolSlider = document.getElementById('tp-volume');
+      var tpSavedVol = parseFloat(localStorage.getItem('trailer_volume') || '0.3');
+      video.volume = tpSavedVol;
+      video.muted = false;
+      if (tpVolSlider) tpVolSlider.value = Math.round(tpSavedVol * 100);
+      function updateIcon() {
+        muteBtn.textContent = video.muted ? '🔇' : '🔊';
+        if (tpVolSlider) tpVolSlider.value = video.muted ? 0 : Math.round(video.volume * 100);
+      }
+      updateIcon();
+      if (tpVolSlider) {
+        tpVolSlider.oninput = function() {
+          var v = parseInt(this.value) / 100;
+          video.volume = v;
+          video.muted = v === 0;
+          localStorage.setItem('trailer_volume', String(v));
+          updateIcon();
+        };
+      }
+      muteBtn.onclick = function(e) { e.preventDefault(); e.stopPropagation(); video.muted = !video.muted; if (!video.muted) { var sv = parseFloat(localStorage.getItem('trailer_volume') || '0.3'); video.volume = sv || 0.3; } updateIcon(); if (!video.muted && video.paused) video.play().catch(()=>{}); };
+      video.addEventListener('volumechange', updateIcon);
+    }
+
+    function hideTrailer() {
+      if (popupHovered) return;
+      clearHideTimeout();
+      currentAppid = null;
+      if (hls) { hls.destroy(); hls = null; }
+      video.pause();
+      video.removeAttribute('src');
+      hideSpinner();
+      popup.style.display = 'none';
+      popup.style.opacity = '1';
+    }
+
+    function positionPopup(card) {
+      if (!popup || !card) return;
+      popup.style.display = 'block';
+      void popup.offsetWidth; // force reflow
+      const pw = popup.offsetWidth, ph = popup.offsetHeight;
+      const r = card.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight;
+      let left = r.right + 12, top = r.top;
+      if (left + pw > vw - 10) left = r.left - pw - 12;
+      if (left < 10) left = 10;
+      if (left + pw > vw - 10) left = vw - pw - 10;
+      if (top + ph > vh - 10) top = vh - ph - 10;
+      if (top < 10) top = 10;
+      popup.style.left = left + 'px';
+      popup.style.top = top + 'px';
+    }
+
+    function attachToCards() {
+      document.querySelectorAll('#game-grid .card, .card[data-appid]').forEach(card => {
+        if (card._tpAttached) return;
+        card._tpAttached = true;
+        let cardHoverTimer = null;
+        card.addEventListener('mouseenter', function() {
+          clearHideTimeout();
+          const appid = this.getAttribute('data-appid');
+          if (!appid) return;
+          const name = this.getAttribute('data-name') || this.querySelector('.info')?.textContent?.match(/Name:\s*(.+?)(?:Added|$)/)?.[1]?.trim() || appid;
+          clearTimeout(cardHoverTimer);
+          cardHoverTimer = setTimeout(() => showTrailer(appid, name, this), DELAY);
+        });
+        card.addEventListener('mouseleave', function() {
+          clearTimeout(cardHoverTimer);
+          scheduleHide();
+        });
+      });
+    }
+
+    // Popup hover listeners
+    if (popup) {
+      popup.addEventListener('mouseenter', () => { popupHovered = true; clearHideTimeout(); });
+      popup.addEventListener('mouseleave', () => { popupHovered = false; scheduleHide(); });
+    }
+
+    function init() {
+      attachToCards();
+      setupMuteToggle();
+      const grid = document.getElementById('game-grid');
+      if (grid) new MutationObserver(attachToCards).observe(grid, { childList: true, subtree: true });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  })();
+  </script>
+</body>
+</html>
