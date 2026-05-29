@@ -6,7 +6,7 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
   <meta charset="UTF-8" />
-  <title>Steam Unlock Onennabe</title>
+  <title>ShadowPlay+</title>
 
   <style id="navbar-css">
     /* ── COMMUNITY CHAT STYLES ── */
@@ -67,7 +67,7 @@
   }
 
   /* ── NAVBAR ── */
-  :root { --nb-h: 60px; --nb-tab-h: 45px; }
+  :root { --nb-h: 80px; --nb-tab-h: 45px; }
   #top-navbar {
     position: fixed; top: 0; left: 0; right: 0; height: var(--nb-h); z-index: 9500;
     display: flex; align-items: stretch;
@@ -87,7 +87,7 @@
     padding: 0 14px; border-right: 1px solid rgba(255,255,255,0.07);
     flex-shrink: 0;
   }
-  #nb-logo img { height: 50px; width: auto; object-fit: contain; }
+  #nb-logo img { height: 80px; width: auto; object-fit: contain; }
   #nb-logo span { font-size: 12px; font-weight: 800; color: #66C0F4; letter-spacing: 0.5px; }
   #nb-nav {
     display: flex; align-items: stretch; flex: 1;
@@ -598,7 +598,7 @@
       <button class="nb-btn" id="nb-downloaded-proxy">Downloaded Games</button>
       <button class="nb-btn" id="nb-tools-proxy">Tools</button>
       <button class="nb-btn danger" id="nb-restart-proxy">Restart Steam</button>
-      <button class="nb-btn" id="nb-clear-cache-btn" title="Clear cached app data (keeps your license)">Clear SUO Cache</button>
+      <button class="nb-btn" id="nb-clear-cache-btn" title="Clear cached app data (keeps your license)">Clear App Cache</button>
       <button class="nb-btn danger" id="nb-remove-proxy">Remove All</button>
       <button class="nb-btn accent" id="nb-unlock-proxy">Unlock Top 5k</button>
     </div>
@@ -654,7 +654,7 @@
   </div>
 
   <!-- Offline Banner -->
-  <div id="offline-banner" data-i18n="offline_banner" style="display:none;position:sticky;top:0;z-index:9999;background:#2b2f3a;color:#ffeb3b;padding:8px 12px;font-weight:600;border-bottom:1px solid rgba(255,255,255,.12);">
+  <div id="offline-banner" style="display:none;position:sticky;top:0;z-index:9999;background:#2b2f3a;color:#ffeb3b;padding:8px 12px;font-weight:600;border-bottom:1px solid rgba(255,255,255,.12);">
     API is offline — showing cached list. Latest games not loaded.
   </div>
 
@@ -676,18 +676,18 @@
     <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Close sidebar">×</button>
     <!-- Sidebar Tools -->
     <details id="sidebar-tools" class="sidebar-accordion">
-      <summary><span data-i18n="settings">Settings</span><span class="chev" aria-hidden="true">▸</span></summary>
+      <summary><span>Settings</span><span class="chev" aria-hidden="true">▸</span></summary>
       <div class="accordion-body">
         <div class="sidebar-section">
           <div class="toggle-row">
-            <span class="toggle-label" data-i18n="parental_control">Parental Control</span>
+            <span class="toggle-label">Parental Control</span>
             <label class="switch"><input type="checkbox" id="pc-toggle" aria-label="Parental Control"><span class="slider round"></span></label>
           </div>
-          <small class="toggle-hint" data-i18n="hide_adult">Hide Adult Content</small>
+          <small class="toggle-hint">Hide Adult Content</small>
         </div>
         <div class="sidebar-section">
           <div class="zoom-controls">
-            <span class="toggle-hint" data-i18n="resize_ui">Resize UI</span>
+            <span class="toggle-hint">Resize UI</span>
             <div class="zoom-buttons">
               <button id="zoom-out" class="chip subtle">−</button>
               <button id="zoom-in" class="chip subtle">＋</button>
@@ -695,44 +695,28 @@
           </div>
         </div>
         <div>
-          <button id="activate-btn" class="sidebar-btn" data-i18n="activate_app">Activate App</button>
-          <button id="btn-delete-cdkey" class="sidebar-btn danger" data-i18n="reset_activation">Reset Activation</button>
+          <button id="activate-btn" class="sidebar-btn">Activate App</button>
+          <button id="btn-delete-cdkey" class="sidebar-btn danger">Reset Activation</button>
         </div>
       </div>
     </details>
     <!-- Theme Picker -->
     <details id="sidebar-theme" class="sidebar-accordion">
-      <summary><span data-i18n="theme_label">🎨 Theme</span><span class="chev" aria-hidden="true">▸</span></summary>
+      <summary><span>🎨 Theme</span><span class="chev" aria-hidden="true">▸</span></summary>
       <div class="accordion-body">
         <div class="sidebar-section">
-          <small class="toggle-hint" data-i18n="choose_theme">Choose your store theme</small>
+          <small class="toggle-hint">Choose your store theme</small>
           <div id="theme-btn-group" class="theme-btn-group" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
             <button class="sidebar-btn theme-pick-btn" data-theme="original">🎮 Original</button>
             <button class="sidebar-btn theme-pick-btn" data-theme="cny">💜 Indigo Galaxy</button>
-            <button class="sidebar-btn theme-pick-btn" data-theme="hariraya">🌙 Hari Raya</button>
+            <button class="sidebar-btn theme-pick-btn" data-theme="hariraya">🌙 Green</button>
           </div>
           <div id="theme-active-label" style="margin-top:8px;font-size:11px;color:#888;text-align:center;"></div>
         </div>
       </div>
     </details>
-    <!-- Language Switcher -->
-    <details id="sidebar-language" class="sidebar-accordion">
-      <summary><span data-i18n="language_label">🌐 Language</span><span class="chev" aria-hidden="true">▸</span></summary>
-      <div class="accordion-body">
-        <div class="sidebar-section">
-          <small class="toggle-hint" data-i18n="choose_language">Choose your language</small>
-          <div id="lang-btn-group" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
-            <button class="sidebar-btn lang-pick-btn" data-lang="en">🇬🇧 English</button>
-            <button class="sidebar-btn lang-pick-btn" data-lang="bm">🇲🇾 Bahasa Melayu</button>
-            <button class="sidebar-btn lang-pick-btn" data-lang="zh">🇨🇳 中文</button>
-            <button class="sidebar-btn lang-pick-btn" data-lang="ke">🇲🇾 Kelate Ni 😂</button>
-          </div>
-          <div id="lang-active-label" style="margin-top:8px;font-size:11px;color:#888;text-align:center;"></div>
-        </div>
-      </div>
-    </details>
-     <button id="refresh-games-btn" class="sidebar-btn" data-i18n="refresh_games">Refresh Game List</button>
-    <button id="show-installed-btn" class="sidebar-btn" data-i18n="show_installed">Show Unlocked Games</button>
+     <button id="refresh-games-btn" class="sidebar-btn">Refresh Game List</button>
+    <button id="show-installed-btn" class="sidebar-btn">Show Unlocked Games</button>
     <button id="downloaded-games-btn" class="sidebar-btn" style="background:linear-gradient(135deg,#2e7d32,#1b5e20);margin-top:6px;">📦 Downloaded Games</button>
     <button id="tools-modal-btn" class="sidebar-btn">
       🛠️ Tools
@@ -812,16 +796,7 @@
         <div style="background:linear-gradient(135deg,#12192a,#1a2340);border:1px solid rgba(102,192,244,0.12);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;">
           <button class="sidebar-btn theme-pick-btn nb-theme-proxy" data-theme="original">🎮 Original</button>
           <button class="sidebar-btn theme-pick-btn nb-theme-proxy" data-theme="cny">💜 Indigo Galaxy</button>
-          <button class="sidebar-btn theme-pick-btn nb-theme-proxy" data-theme="hariraya">🌙 Hari Raya</button>
-        </div>
-
-        <!-- Language -->
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.35);padding:4px 2px 0;">Language</div>
-        <div style="background:linear-gradient(135deg,#12192a,#1a2340);border:1px solid rgba(102,192,244,0.12);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;">
-          <button class="sidebar-btn lang-pick-btn nb-lang-proxy" data-lang="en">🇬🇧 English</button>
-          <button class="sidebar-btn lang-pick-btn nb-lang-proxy" data-lang="bm">🇲🇾 Bahasa Melayu</button>
-          <button class="sidebar-btn lang-pick-btn nb-lang-proxy" data-lang="zh">🇨🇳 中文</button>
-          <button class="sidebar-btn lang-pick-btn nb-lang-proxy" data-lang="ke">🇲🇾 Kelate Ni 😂</button>
+          <button class="sidebar-btn theme-pick-btn nb-theme-proxy" data-theme="hariraya">🌙 Green</button>
         </div>
 
       </div>
@@ -932,7 +907,7 @@
                 <span style="font-weight:700;color:#e0eaf5;font-size:13px;">CloudRedirect Launcher</span>
                 <span id="cr-status-badge" style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:700;background:rgba(239,68,68,0.15);color:#f87171;">Not Found</span>
               </div>
-              <p style="margin:0 0 8px;font-size:11px;color:#5a7a9a;line-height:1.4;font-style:italic;">3rd party tool — not made by ONENNABE.</p>
+              <p style="margin:0 0 8px;font-size:11px;color:#5a7a9a;line-height:1.4;font-style:italic;">3rd party tool — not made by ShadowPlay+.</p>
               <ol style="margin:0;padding-left:16px;font-size:11.5px;color:#7a9ab8;line-height:1;display:flex;flex-direction:column;gap:7px;">
                 <li>One Click Run Patch <strong style="color:#9ab8d0;">Auto setup </strong> all the necessary patches.</li>
                 <li>Fixes cloud saves by using your <strong style="color:#9ab8d0;">Google account</strong> as the cloud location. Set up your Cloud Provider and sign in to Google first.</li>
@@ -1424,9 +1399,6 @@
       Games <span class="sf-active-dot"></span> <span class="sf-caret">▾</span>
     </button>
     <div class="sf-dd-panel">
-      <div class="sf-dd-item" id="sf-item-membership" onclick="sfClick('filter-membership','sf-dd-games')">
-        <span class="sf-check">✓</span> Denuvo Games
-      </div>
       <div class="sf-dd-item" id="sf-item-top" onclick="sfClick('filter-top-downloads','sf-dd-games')">
         <span class="sf-check">✓</span> Top 20 Downloads
       </div>
@@ -1446,9 +1418,6 @@
       </div>
       <div class="sf-dd-item" id="sf-item-bypass" onclick="sfClick('filter-bypass','sf-dd-features')">
         <span class="sf-check">✓</span> Bypass Available
-      </div>
-      <div class="sf-dd-item" id="sf-item-hypervisor" onclick="sfClick('filter-hypervisor','sf-dd-features')">
-        <span class="sf-check">✓</span> <span style="color:#c084fc;">⚙️ Hypervisor Bypass</span>
       </div>
     </div>
   </div>
@@ -1483,11 +1452,9 @@
 <div class="search-bar" style="display:none!important;">
   <input id="search" type="search" placeholder="Search by AppID or Game Name..." />
   <div class="filter-row" id="filter-row">
-    <button id="filter-membership" class="chip">Denuvo Games</button>
     <button id="filter-top-downloads" class="chip">Top 20 Downloads</button>
     <button id="filter-online" class="chip">Online Supported</button>
     <button id="filter-bypass" class="chip">Bypass Available</button>
-    <button id="filter-hypervisor" class="chip">⚙️ Hypervisor Bypass</button>
     <button id="filter-clear" class="chip subtle">Clear</button>
     <button id="toggle-genre" class="chip subtle">Show Genre Filter</button>
     <div id="genre-row" class="genre-row"></div>
@@ -1539,7 +1506,6 @@
 
   // Map: visual item ID → real button ID
   var itemMap = {
-    'sf-item-membership': 'filter-membership',
     'sf-item-top':        'filter-top-downloads',
     'sf-item-online':     'filter-online',
     'sf-item-bypass':     'filter-bypass',
@@ -1557,7 +1523,7 @@
     });
 
     // Update dropdown headers with active dot
-    var gamesActive = ['sf-item-membership','sf-item-top'].some(function(id) {
+    var gamesActive = ['sf-item-top'].some(function(id) {
       return document.getElementById(id) && document.getElementById(id).classList.contains('checked');
     });
     var featActive = ['sf-item-online','sf-item-bypass','sf-item-hypervisor'].some(function(id) {
@@ -1631,7 +1597,7 @@
       });
     }
     // Also observe real button class changes for external triggers
-    var realBtns = ['filter-membership','filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
+    var realBtns = ['filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
     realBtns.forEach(function(id) {
       var btn = document.getElementById(id);
       if (btn) {
@@ -1696,12 +1662,12 @@
     </div>
     <div id="game-grid" class="grid"></div>
     <div class="pagination">
-      <button id="prev" data-i18n="btn_prev">← Previous</button>
+      <button id="prev">← Previous</button>
       <span id="page-label">Page 1 of 1</span>
-      <button id="next" data-i18n="btn_next">Next →</button>
+      <button id="next">Next →</button>
       <div class="jump-to-page">
         <input type="number" id="jump-to-page-input" min="1" placeholder="1-100" aria-label="Jump to page number" />
-        <button id="jump-to-page-btn" title="Jump to page" data-i18n="btn_go">Go</button>
+        <button id="jump-to-page-btn" title="Jump to page">Go</button>
       </div>
     </div>
   </div>
@@ -1715,29 +1681,29 @@
         <div class="act-profile">
           <img id="modal-avatar" class="act-avatar" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100%25' height='100%25' rx='40' ry='40' fill='%23222'/><text x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-family='Helvetica Neue' font-size='14'>STEAM</text></svg>" alt="Steam avatar" />
           <div class="act-id">
-            <h2 id="activation-title" class="act-title" data-i18n="activate_title">Activate Application</h2>
+            <h2 id="activation-title" class="act-title">Activate Application</h2>
             <div id="modal-persona" class="act-persona">Unknown Steam User</div>
             <div class="act-steamid"><span class="act-k">SteamID</span><span id="modal-steamid" class="act-v">UNKNOWN</span></div>
           </div>
         </div>
       </div>
-      <p id="activation-desc" class="act-desc" data-i18n="activation_desc">Enter your ONENNABE CD Key to activate for this Steam account. This will bind your Steam ID with the CDKEY.<br>PLEASE ENSURE YOU ARE LOGGING IN USING CORRECT STEAM ACCOUNT. <br>WE WILL NOT ASSIST IF YOU MADE A MISTAKE BINDING THE WRONG ACCOUNT!</p>
-      <label id="modal-cdkey-label" for="modal-cdkey" class="act-label" data-i18n="cdkey_label">CD Key</label>
-      <input id="modal-cdkey" class="act-input" type="text" data-i18n-placeholder="cdkey_placeholder" placeholder="Enter CD Key" autocomplete="off" />
+      <p id="activation-desc" class="act-desc">Enter your ShadowPlay+ CD Key to activate for this Steam account. This will bind your Steam ID with the CDKEY.<br>PLEASE ENSURE YOU ARE LOGGING IN USING CORRECT STEAM ACCOUNT. <br>WE WILL NOT ASSIST IF YOU MADE A MISTAKE BINDING THE WRONG ACCOUNT!</p>
+      <label id="modal-cdkey-label" for="modal-cdkey" class="act-label">CD Key</label>
+      <input id="modal-cdkey" class="act-input" type="text" placeholder="Enter CD Key" autocomplete="off" />
       <div id="modal-activation-info" class="act-info"></div>
       <div class="modal-actions act-actions">
-        <button id="modal-confirm" class="btn-confirm" data-i18n="btn_activate">Activate</button>
-        <button id="modal-cancel" class="btn-cancel" data-i18n="btn_cancel">Cancel</button>
+        <button id="modal-confirm" class="btn-confirm">Activate</button>
+        <button id="modal-cancel" class="btn-cancel">Cancel</button>
       </div>
       <p id="modal-feedback" class="feedback act-feedback"></p>
     </div>
   </div>
 
   <!-- Notification Modals -->
-  <div id="download-complete-modal" class="notification-modal" style="display:none;"><div class="notification-content" data-i18n="download_complete">✅ Download Completed</div></div>
-  <div id="loading-modal" class="notification-modal" style="display:none;"><div class="notification-content" id="loading-content" data-i18n="downloading">Downloading... Please wait</div></div>
-  <div id="details-loading-modal" class="notification-modal" style="display:none;"><div class="notification-content" data-i18n="loading_details">Loading game details...</div></div>
-  <div id="remove-complete-modal" class="notification-modal" style="display:none;"><div class="notification-content" style="background:#c62828;" data-i18n="game_removed">❌ Game Removed</div></div>
+  <div id="download-complete-modal" class="notification-modal" style="display:none;"><div class="notification-content">✅ Download Completed</div></div>
+  <div id="loading-modal" class="notification-modal" style="display:none;"><div class="notification-content" id="loading-content">Downloading... Please wait</div></div>
+  <div id="details-loading-modal" class="notification-modal" style="display:none;"><div class="notification-content">Loading game details...</div></div>
+  <div id="remove-complete-modal" class="notification-modal" style="display:none;"><div class="notification-content" style="background:#c62828;">❌ Game Removed</div></div>
 
   <!-- Game Details Modal -->
   <div id="details-modal"><div id="details-modal-content"><button id="details-modal-close" aria-label="Close details modal">&times;</button><div id="details-modal-img-container"><img id="details-modal-img" src="" alt="Game Cover" /></div><div id="details-modal-body"></div></div></div>
@@ -1757,35 +1723,35 @@
       <div><svg style="animation:spin 1s linear infinite;" width="44" height="44" viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" stroke="#4caf50" stroke-width="5" fill="none" opacity="0.12"/><path d="M44 24a20 20 0 1 0-4.65 12.88" fill="none" stroke="#4caf50" stroke-width="5" stroke-linecap="round" stroke-dasharray="60 80"/></svg></div>
       <progress id="bulk-download-progress" value="0" max="500" style="width:95%;height:16px;border-radius:8px;appearance:none;"></progress>
       <div id="bulk-download-label" style="font-size:0.99rem;color:#4caf50;"></div>
-      <button id="bulk-cancel-btn" class="btn-cancel" style="margin-top:12px;" data-i18n="btn_cancel">Cancel</button>
+      <button id="bulk-cancel-btn" class="btn-cancel" style="margin-top:12px;">Cancel</button>
     </div>
   </div>
 
   <!-- Bulk AppID Modal -->
-  <div id="bulk-appid-modal" class="modal"><div class="modal-content"><h3 data-i18n="adding_games">Adding your games</h3><p id="bulk-progress-text" data-i18n="starting">Starting...</p><progress id="bulk-progress-bar" value="0" max="100" style="width:100%; height:20px; border-radius: 8px;"></progress><button id="bulk-appidcancel-btn" class="btn-cancel" data-i18n="btn_cancel">Cancel</button></div></div>
+  <div id="bulk-appid-modal" class="modal"><div class="modal-content"><h3>Adding your games</h3><p id="bulk-progress-text">Starting...</p><progress id="bulk-progress-bar" value="0" max="100" style="width:100%; height:20px; border-radius: 8px;"></progress><button id="bulk-appidcancel-btn" class="btn-cancel">Cancel</button></div></div>
 
   <!-- SteamID Mismatch Modal -->
   <div id="steamid-mismatch-modal" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="steamid-mismatch-title" style="display:none;">
     <div class="modal-content modal-pro">
-      <div class="modal-pro__header"><div class="modal-pro__badge" data-i18n="security">Security</div><h2 id="steamid-mismatch-title" class="modal-pro__title" data-i18n="mismatch_title">Steam Account Mismatch</h2><p class="modal-pro__subtitle" data-i18n="mismatch_subtitle">This app is activated for a different Steam account. Please switch to the correct account to continue.</p></div>
+      <div class="modal-pro__header"><div class="modal-pro__badge">Security</div><h2 id="steamid-mismatch-title" class="modal-pro__title">Steam Account Mismatch</h2><p class="modal-pro__subtitle">This app is activated for a different Steam account. Please switch to the correct account to continue.</p></div>
       <div class="modal-pro__grid">
-        <div class="profile-card"><div class="profile-card__label" data-i18n="currently_signed">Currently signed in</div><div class="profile-card__row"><img id="mismatch-current-avatar" class="profile-card__avatar" alt="Current Steam avatar" src="" onerror="this.style.display='none'"><div class="profile-card__meta"><div id="mismatch-current-persona" class="profile-card__name">Unknown Steam User</div><div class="profile-card__sub">SteamID: <span id="current-steamid">UNKNOWN</span></div></div></div></div>
-        <div class="profile-card profile-card--warn"><div class="profile-card__label" data-i18n="activated_for">Activated for</div><div class="profile-card__row"><img id="mismatch-activated-avatar" class="profile-card__avatar" alt="Activated Steam avatar" src="" onerror="this.style.display='none'"><div class="profile-card__meta"><div id="mismatch-activated-persona" class="profile-card__name">Unknown Steam User</div><div class="profile-card__sub">SteamID: <span id="activated-steamid">UNKNOWN</span></div></div></div></div>
+        <div class="profile-card"><div class="profile-card__label">Currently signed in</div><div class="profile-card__row"><img id="mismatch-current-avatar" class="profile-card__avatar" alt="Current Steam avatar" src="" onerror="this.style.display='none'"><div class="profile-card__meta"><div id="mismatch-current-persona" class="profile-card__name">Unknown Steam User</div><div class="profile-card__sub">SteamID: <span id="current-steamid">UNKNOWN</span></div></div></div></div>
+        <div class="profile-card profile-card--warn"><div class="profile-card__label">Activated for</div><div class="profile-card__row"><img id="mismatch-activated-avatar" class="profile-card__avatar" alt="Activated Steam avatar" src="" onerror="this.style.display='none'"><div class="profile-card__meta"><div id="mismatch-activated-persona" class="profile-card__name">Unknown Steam User</div><div class="profile-card__sub">SteamID: <span id="activated-steamid">UNKNOWN</span></div></div></div></div>
       </div>
-      <div class="modal-pro__note" data-i18n="mismatch_tip">Tip: After switching Steam account, restart the app (or press the button below).</div>
-      <div class="modal-actions modal-pro__actions"><button id="restart-steam-btn-modal" class="sidebar-btn" data-i18n="restart_steam">Restart Steam & Switch Account</button></div>
+      <div class="modal-pro__note">Tip: After switching Steam account, restart the app (or press the button below).</div>
+      <div class="modal-actions modal-pro__actions"><button id="restart-steam-btn-modal" class="sidebar-btn">Restart Steam & Switch Account</button></div>
     </div>
   </div>
 
   <!-- Refresh Game List Modal -->
-  <div id="refresh-list-modal" style="display:none;position:fixed;inset:0;top:0;left:0;right:0;bottom:0;width:100vw;height:100vh;z-index:99999;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);backdrop-filter:blur(5px);"><style>#refresh-list-modal .rl-card{background:linear-gradient(180deg,#1b2838,#171a21);border:1px solid rgba(102,192,244,0.22);border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,0.6);overflow:hidden;padding:24px 26px;min-width:340px;max-width:480px;font-family:'Motiva Sans',Arial,sans-serif;}#refresh-list-modal .rl-head{display:flex;align-items:center;gap:14px;margin-bottom:18px;}#refresh-list-modal #refresh-anim circle{stroke:#66C0F4!important;}#refresh-list-modal #refresh-anim path,#refresh-list-modal #refresh-anim polyline{stroke:#66C0F4!important;}#refresh-list-modal .rl-label{font-size:11px;color:#66C0F4;text-transform:uppercase;letter-spacing:2px;font-weight:700;margin:0 0 4px;text-align:left;}#refresh-list-modal .rl-sub{font-size:13px;color:#c7d5e0;line-height:1.4;text-align:left;}#refresh-list-modal .rl-bar-wrap{width:100%;height:18px;background:#000;border-radius:2px;overflow:hidden;border:1px solid rgba(102,192,244,0.15);position:relative;}#refresh-list-modal #refresh-progress-bar{display:block;width:100%;height:100%;border:none;background:transparent;appearance:none;-webkit-appearance:none;}#refresh-list-modal #refresh-progress-bar::-webkit-progress-bar{background:transparent;}#refresh-list-modal #refresh-progress-bar::-webkit-progress-value{background:linear-gradient(90deg,#417a9b,#66C0F4,#7DD4FF);box-shadow:0 0 8px rgba(102,192,244,0.5);transition:width 0.2s;}#refresh-list-modal #refresh-progress-bar::-moz-progress-bar{background:linear-gradient(90deg,#417a9b,#66C0F4);}#refresh-list-modal #refresh-progress-label{font-size:11px;color:#8ba5be;letter-spacing:.3px;margin-top:8px;text-align:left;display:block;}</style><div class="rl-card"><div class="rl-head"><svg id="refresh-anim" width="32" height="32" viewBox="0 0 48 48" style="animation:spin 1s linear infinite;flex-shrink:0;"><circle cx="24" cy="24" r="20" stroke="#66C0F4" stroke-width="5" fill="none" opacity="0.18"/><path d="M44 24a20 20 0 1 0-4.65 12.88" fill="none" stroke="#66C0F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="60 80"/><polyline points="41,34 44,37 47,32" fill="none" stroke="#66C0F4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><div style="flex:1;min-width:0;"><div class="rl-label" data-i18n="refreshing">Refreshing Game List</div><div class="rl-sub" data-i18n="please_wait">Please wait while we fetch the latest games for you.</div></div></div><div class="rl-bar-wrap"><progress id="refresh-progress-bar" value="0" max="100"></progress></div><div id="refresh-progress-label" data-i18n="starting">Starting…</div></div></div>
+  <div id="refresh-list-modal" style="display:none;position:fixed;inset:0;top:0;left:0;right:0;bottom:0;width:100vw;height:100vh;z-index:99999;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);backdrop-filter:blur(5px);"><style>#refresh-list-modal .rl-card{background:linear-gradient(180deg,#1b2838,#171a21);border:1px solid rgba(102,192,244,0.22);border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,0.6);overflow:hidden;padding:24px 26px;min-width:340px;max-width:480px;font-family:'Motiva Sans',Arial,sans-serif;}#refresh-list-modal .rl-head{display:flex;align-items:center;gap:14px;margin-bottom:18px;}#refresh-list-modal #refresh-anim circle{stroke:#66C0F4!important;}#refresh-list-modal #refresh-anim path,#refresh-list-modal #refresh-anim polyline{stroke:#66C0F4!important;}#refresh-list-modal .rl-label{font-size:11px;color:#66C0F4;text-transform:uppercase;letter-spacing:2px;font-weight:700;margin:0 0 4px;text-align:left;}#refresh-list-modal .rl-sub{font-size:13px;color:#c7d5e0;line-height:1.4;text-align:left;}#refresh-list-modal .rl-bar-wrap{width:100%;height:18px;background:#000;border-radius:2px;overflow:hidden;border:1px solid rgba(102,192,244,0.15);position:relative;}#refresh-list-modal #refresh-progress-bar{display:block;width:100%;height:100%;border:none;background:transparent;appearance:none;-webkit-appearance:none;}#refresh-list-modal #refresh-progress-bar::-webkit-progress-bar{background:transparent;}#refresh-list-modal #refresh-progress-bar::-webkit-progress-value{background:linear-gradient(90deg,#417a9b,#66C0F4,#7DD4FF);box-shadow:0 0 8px rgba(102,192,244,0.5);transition:width 0.2s;}#refresh-list-modal #refresh-progress-bar::-moz-progress-bar{background:linear-gradient(90deg,#417a9b,#66C0F4);}#refresh-list-modal #refresh-progress-label{font-size:11px;color:#8ba5be;letter-spacing:.3px;margin-top:8px;text-align:left;display:block;}</style><div class="rl-card"><div class="rl-head"><svg id="refresh-anim" width="32" height="32" viewBox="0 0 48 48" style="animation:spin 1s linear infinite;flex-shrink:0;"><circle cx="24" cy="24" r="20" stroke="#66C0F4" stroke-width="5" fill="none" opacity="0.18"/><path d="M44 24a20 20 0 1 0-4.65 12.88" fill="none" stroke="#66C0F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="60 80"/><polyline points="41,34 44,37 47,32" fill="none" stroke="#66C0F4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><div style="flex:1;min-width:0;"><div class="rl-label">Refreshing Game List</div><div class="rl-sub">Please wait while we fetch the latest games for you.</div></div></div><div class="rl-bar-wrap"><progress id="refresh-progress-bar" value="0" max="100"></progress></div><div id="refresh-progress-label">Starting…</div></div></div>
 
   <!-- Custom Confirm Modal -->
-  <div id="custom-confirm-modal" class="modal"><div class="notification-content" style="min-width:400px;text-align:center;"><div id="custom-confirm-msg" style="margin-bottom:10px; font-size:1.1rem;"></div><div style="display:flex;justify-content:center;gap:5px;"><button id="custom-confirm-ok" class="btn-confirm" data-i18n="btn_ok">OK</button><button id="custom-confirm-cancel" class="btn-cancel" data-i18n="btn_cancel">Cancel</button></div></div></div>
+  <div id="custom-confirm-modal" class="modal"><div class="notification-content" style="min-width:400px;text-align:center;"><div id="custom-confirm-msg" style="margin-bottom:10px; font-size:1.1rem;"></div><div style="display:flex;justify-content:center;gap:5px;"><button id="custom-confirm-ok" class="btn-confirm">OK</button><button id="custom-confirm-cancel" class="btn-cancel">Cancel</button></div></div></div>
 
   <!-- Cart Review Modal -->
   <div id="cart-review-modal" class="modal" tabindex="-1" aria-modal="true" style="display:none;">
-    <div class="modal-content cart-modal-content"><h2 style="text-align:center; margin-bottom:16px;" data-i18n="review_cart">🛒 Review Your Cart</h2><div id="cart-list-container"><ul id="cart-list" class="cart-list"></ul><p id="cart-empty-msg" class="cart-empty-msg" data-i18n="cart_empty">Your cart is empty.</p></div><div class="modal-actions cart-modal-actions"><button id="cart-cancel-btn" class="btn-cancel" data-i18n="btn_cancel">Cancel</button><button id="cart-download-btn" class="btn-confirm"><span style="font-weight:600;" data-i18n="download_cart">Download Cart</span>(<span id="cart-modal-count">0</span>)</button></div></div>
+    <div class="modal-content cart-modal-content"><h2 style="text-align:center; margin-bottom:16px;">🛒 Review Your Cart</h2><div id="cart-list-container"><ul id="cart-list" class="cart-list"></ul><p id="cart-empty-msg" class="cart-empty-msg">Your cart is empty.</p></div><div class="modal-actions cart-modal-actions"><button id="cart-cancel-btn" class="btn-cancel">Cancel</button><button id="cart-download-btn" class="btn-confirm"><span style="font-weight:600;">Download Cart</span>(<span id="cart-modal-count">0</span>)</button></div></div>
   </div>
 
   <!-- ✅ UNIFIED GAME DETAIL PANEL - Horizontal: Trailer left, Details+Actions right -->
@@ -1844,16 +1810,14 @@
     #nb-activate-proxy:hover {
       filter: brightness(1.1);
     }
-    /* Theme + Language pickers in settings — give Steam-flat treatment */
-    #nb-settings-modal .nb-theme-proxy,
-    #nb-settings-modal .nb-lang-proxy {
+    /* Theme picker in settings — give Steam-flat treatment */
+    #nb-settings-modal .nb-theme-proxy {
       background: rgba(102,192,244,0.06) !important;
       border: 1px solid rgba(102,192,244,0.18) !important;
       color: var(--st-text) !important;
       border-radius: 3px !important;
     }
-    #nb-settings-modal .nb-theme-proxy:hover,
-    #nb-settings-modal .nb-lang-proxy:hover {
+    #nb-settings-modal .nb-theme-proxy:hover {
       background: rgba(102,192,244,0.18) !important;
       border-color: rgba(102,192,244,0.4) !important;
       color: #fff !important;
@@ -2650,22 +2614,22 @@
   </style>
 
   <!-- Oneshot Install Modal -->
-  <div id="oneshot-install-modal" class="modal" style="display:none;z-index:9999;"><div class="modal-content" style="min-width:320px;max-width:90vw;"><h2 data-i18n="installing">Installing Oneshot Package…</h2><progress id="oneshot-install-progress" value="0" max="100" style="width:100%;height:20px;"></progress><div id="oneshot-install-label" style="margin-top:10px;color:#7cf;font-size:1.08rem;" data-i18n="preparing">Preparing…</div></div></div>
+  <div id="oneshot-install-modal" class="modal" style="display:none;z-index:9999;"><div class="modal-content" style="min-width:320px;max-width:90vw;"><h2>Installing Oneshot Package…</h2><progress id="oneshot-install-progress" value="0" max="100" style="width:100%;height:20px;"></progress><div id="oneshot-install-label" style="margin-top:10px;color:#7cf;font-size:1.08rem;">Preparing…</div></div></div>
 
   <!-- Changelog Modal -->
-  <div id="changelog-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:20000;background:rgba(30,40,55,0.96);align-items:center;justify-content:center;"><div style="max-width:900px;width:90vw;margin:50px auto;background:#222b38;border-radius:10px;box-shadow:0 0 30px #000a;padding:24px 36px;position:relative;"><button id="close-changelog-btn" style="position:absolute;top:16px;right:18px;font-size:20px;background:none;border:none;color:#aaa;cursor:pointer;">&times;</button><h2 style="text-align:center;font-size:1.5em;margin-bottom:12px;color:#fff;" data-i18n="changelog">Changelog</h2><div id="changelog-content" style="max-height:540px;overflow:auto;color:#dadada;padding-right:4px;"></div></div></div>
+  <div id="changelog-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:20000;background:rgba(30,40,55,0.96);align-items:center;justify-content:center;"><div style="max-width:900px;width:90vw;margin:50px auto;background:#222b38;border-radius:10px;box-shadow:0 0 30px #000a;padding:24px 36px;position:relative;"><button id="close-changelog-btn" style="position:absolute;top:16px;right:18px;font-size:20px;background:none;border:none;color:#aaa;cursor:pointer;">&times;</button><h2 style="text-align:center;font-size:1.5em;margin-bottom:12px;color:#fff;">Changelog</h2><div id="changelog-content" style="max-height:540px;overflow:auto;color:#dadada;padding-right:4px;"></div></div></div>
 
   <!-- General Notification Modal -->
   <div id="notification-modal" class="notification-modal" style="display:none;"><div class="notification-content" id="notification-content" style="min-width:320px; text-align:center;"></div></div>
 
   <!-- Parental Control PIN Modal -->
-  <div id="pc-pin-modal" class="modal" role="dialog" aria-modal="true" style="display:none;z-index:20000!important;"><div class="modal-content" style="max-width:420px;"><h2 id="pc-pin-title" style="margin-bottom:8px;" data-i18n="set_pin">Set Parental PIN</h2><p id="pc-pin-desc" style="opacity:.85;margin-bottom:12px;" data-i18n="create_pin">Create a 4–8 digit PIN.</p><div id="pc-pin-setup-fields"><label for="pc-pin-input" style="display:block;margin:6px 0 4px;" data-i18n="pin_label">PIN</label><input id="pc-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /><label for="pc-pin-confirm" style="display:block;margin:12px 0 4px;" data-i18n="confirm_pin">Confirm PIN</label><input id="pc-pin-confirm" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /></div><div id="pc-pin-unlock-fields" style="display:none;"><label for="pc-pin-unlock" style="display:block;margin:6px 0 4px;" data-i18n="enter_pin">Enter PIN to turn off</label><input id="pc-pin-unlock" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /></div><p id="pc-pin-error" class="feedback" style="color:#ff6b6b;min-height:20px;margin-top:8px;"></p><div class="modal-actions" style="margin-top:12px;"><button id="pc-pin-ok" class="btn-confirm" data-i18n="btn_ok">OK</button><button id="pc-pin-cancel" class="btn-cancel" data-i18n="btn_cancel">Cancel</button></div></div></div>
+  <div id="pc-pin-modal" class="modal" role="dialog" aria-modal="true" style="display:none;z-index:20000!important;"><div class="modal-content" style="max-width:420px;"><h2 id="pc-pin-title" style="margin-bottom:8px;">Set Parental PIN</h2><p id="pc-pin-desc" style="opacity:.85;margin-bottom:12px;">Create a 4–8 digit PIN.</p><div id="pc-pin-setup-fields"><label for="pc-pin-input" style="display:block;margin:6px 0 4px;">PIN</label><input id="pc-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /><label for="pc-pin-confirm" style="display:block;margin:12px 0 4px;">Confirm PIN</label><input id="pc-pin-confirm" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /></div><div id="pc-pin-unlock-fields" style="display:none;"><label for="pc-pin-unlock" style="display:block;margin:6px 0 4px;">Enter PIN to turn off</label><input id="pc-pin-unlock" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /></div><p id="pc-pin-error" class="feedback" style="color:#ff6b6b;min-height:20px;margin-top:8px;"></p><div class="modal-actions" style="margin-top:12px;"><button id="pc-pin-ok" class="btn-confirm">OK</button><button id="pc-pin-cancel" class="btn-cancel">Cancel</button></div></div></div>
 
   <!-- Game Actions Modal -->
   <div id="game-actions-modal" class="game-actions-modal" style="display:none;"><div class="modal-content game-actions-content"><button id="game-actions-close" class="game-actions-close" aria-label="Close">&times;</button><div class="game-actions-header"><img id="game-actions-cover" class="game-actions-cover" alt="Game Cover" /><div class="game-actions-info"><h2 id="game-actions-title" class="game-actions-title">Game Title</h2><div id="game-actions-appid" class="game-actions-appid">AppID: 000000</div><div id="game-actions-size" class="game-actions-size">Size: N/A</div><div id="game-actions-downloads" class="game-actions-downloads">Downloads: 0</div></div></div><div class="game-actions-body" id="game-actions-body"></div></div></div>
 
   <!-- Denuvo Warning Modal -->
-  <div id="denuvo-warning-modal" class="modal" role="alertdialog" aria-modal="true" style="display:none;width:auto !important;max-width:95vw !important;padding:0 !important;overflow:hidden !important;max-height:none !important;"><div class="denuvo-warning-content" style="width:auto;max-width:680px;min-width:320px;box-sizing:border-box;max-height:90vh;overflow-y:auto;overflow-x:hidden;"><div class="denuvo-warning-header"><div class="denuvo-warning-icon">⚠️</div><h2 class="denuvo-warning-title">Account Required</h2><h3 class="denuvo-warning-title-malay">Akaun Diperlukan</h3></div><div class="denuvo-warning-body"><div class="denuvo-warning-message"><p class="denuvo-warning-text-en"><strong>THIS IS DENUVO PROTECTED GAME AND WOULD REQUIRE AN ACCOUNT FROM SELLER FOR ACTIVATION</strong></p><ul class="denuvo-warning-list"><li>You will receive login credentials from the seller</li><li>Account sharing required for activation</li><li>1. Click Enable Auto Update in Steam Unlock Onennabe</li><li>2. Close Steam Unlock Onennabe</li><li>3. Login to seller account, play until main menu</li><li>4. Logout from seller account and login to your own account to play the game</li></ul></div><div class="denuvo-warning-message denuvo-warning-malay"><p class="denuvo-warning-text-my"><strong>INI ADALAH PERMAINAN DILINDUNGI DENUVO DAN MEMERLUKAN AKAUN DARIPADA PENJUAL UNTUK PENGAKTIFAN</strong></p><ul class="denuvo-warning-list"><li>Anda akan menerima bukti kelayakan log masuk daripada penjual</li><li>Perkongsian akaun diperlukan untuk pengaktifan</li><li>1. Ketik Enable Auto Update in Steam Unlock Onennabe</li><li>2. Tutup Steam Unlock Onennabe</li><li>3. Log masuk akaun pinjam dari seller, main sampai "main menu"</li><li>4. Log keluar dari akaun seller and log masuk dalam akaun sendiri untuk main game</li></ul></div></div><div class="denuvo-warning-game-info"><img id="denuvo-warning-cover" class="denuvo-warning-cover" src="" alt="Game Cover" /><div class="denuvo-warning-details"><div id="denuvo-warning-game-name" class="denuvo-warning-game-name">Game Name</div><div id="denuvo-warning-tags" class="denuvo-warning-tags"></div></div></div><div class="modal-actions denuvo-warning-actions"><button id="denuvo-warning-cancel" class="btn-cancel">Cancel / Batal</button><button id="denuvo-warning-proceed" class="btn-confirm denuvo-warning-proceed-btn">I Understand, Proceed / Saya Faham, Teruskan</button></div></div></div>
+  <div id="denuvo-warning-modal" class="modal" role="alertdialog" aria-modal="true" style="display:none;width:auto !important;max-width:95vw !important;padding:0 !important;overflow:hidden !important;max-height:none !important;"><div class="denuvo-warning-content" style="width:auto;max-width:680px;min-width:320px;box-sizing:border-box;max-height:90vh;overflow-y:auto;overflow-x:hidden;"><div class="denuvo-warning-header"><div class="denuvo-warning-icon">⚠️</div><h2 class="denuvo-warning-title">Account Required</h2></div><div class="denuvo-warning-body"><div class="denuvo-warning-message"><p class="denuvo-warning-text-en"><strong>THIS IS DENUVO PROTECTED GAME AND WOULD REQUIRE AN ACCOUNT FROM SELLER FOR ACTIVATION</strong></p><ul class="denuvo-warning-list"><li>You will receive login credentials from the seller</li><li>Account sharing required for activation</li><li>1. Click Enable Auto Update in ShadowPlay+</li><li>2. Close ShadowPlay+</li><li>3. Login to seller account, play until main menu</li><li>4. Logout from seller account and login to your own account to play the game</li></ul></div></div><div class="denuvo-warning-game-info"><img id="denuvo-warning-cover" class="denuvo-warning-cover" src="" alt="Game Cover" /><div class="denuvo-warning-details"><div id="denuvo-warning-game-name" class="denuvo-warning-game-name">Game Name</div><div id="denuvo-warning-tags" class="denuvo-warning-tags"></div></div></div><div class="modal-actions denuvo-warning-actions"><button id="denuvo-warning-cancel" class="btn-cancel">Cancel</button><button id="denuvo-warning-proceed" class="btn-confirm denuvo-warning-proceed-btn">I Understand, Proceed</button></div></div></div>
 
   <!-- Hypervisor Bypass Warning Modal -->
   <div id="hypervisor-warning-modal" class="modal" role="alertdialog" aria-modal="true" style="display:none;width:auto !important;max-width:95vw !important;padding:0 !important;overflow:hidden !important;max-height:none !important;">
@@ -2673,7 +2637,6 @@
       <div class="denuvo-warning-header" style="background:linear-gradient(135deg,#3b1f6e,#1e1040);">
         <div class="denuvo-warning-icon">⚙️</div>
         <h2 class="denuvo-warning-title" style="color:#c084fc;">Hypervisor Bypass Required</h2>
-        <h3 class="denuvo-warning-title-malay" style="color:#a78bca;">Bypass Hypervisor Diperlukan</h3>
       </div>
       <div class="denuvo-warning-body">
         <div class="denuvo-warning-message">
@@ -2700,12 +2663,12 @@
             <li>May require turning off <strong>Secure Boot</strong> in BIOS</li>
           </ul>
 
-          <p style="margin:12px 0 4px;font-size:12px;font-weight:700;color:#e0d0ff;">🎮 In Steam Unlock ONENNABE</p>
+          <p style="margin:12px 0 4px;font-size:12px;font-weight:700;color:#e0d0ff;">🎮 In ShadowPlay+</p>
           <ul class="denuvo-warning-list">
             <li>Use <strong>CloudRedirect</strong> inside Tools section, enable <strong>Manifest Pinning</strong></li>
             <li>Download the game from Steam</li>
-            <li>Click <strong>Bypass Game</strong> in Steam Unlock</li>
-            <li>Open from Steam Unlock → click <strong>PLAY</strong> → choose exe</li>
+            <li>Click <strong>Bypass Game</strong> in ShadowPlay+</li>
+            <li>Open from ShadowPlay+ → click <strong>PLAY</strong> → choose exe</li>
             <li>Run game from <strong>HV-PlugNPlay.bat</strong> or <strong>HV-Launcher.bat</strong> or <strong>[GAMENAME].exe</strong></li>
           </ul>
 
@@ -2717,8 +2680,8 @@
       </div>
       <div id="hypervisor-warning-game-name" style="text-align:center;padding:8px 20px;font-size:13px;font-weight:700;color:#c084fc;"></div>
       <div class="modal-actions denuvo-warning-actions">
-        <button id="hypervisor-warning-cancel" class="btn-cancel">Cancel / Batal</button>
-        <button id="hypervisor-warning-proceed" class="btn-confirm" style="background:linear-gradient(135deg,#7c3aed,#a855f7);">I Understand, Proceed / Saya Faham, Teruskan</button>
+        <button id="hypervisor-warning-cancel" class="btn-cancel">Cancel</button>
+        <button id="hypervisor-warning-proceed" class="btn-confirm" style="background:linear-gradient(135deg,#7c3aed,#a855f7);">I Understand, Proceed</button>
       </div>
     </div>
   </div>
@@ -2732,23 +2695,15 @@
   setInterval(function(){
     var l=document.getElementById('theme-active-label');
     if(l&&l.textContent.indexOf('Indigo Galaxy')===-1){
-      l.textContent=l.textContent.replace(/🧧?\s*Chinese New Year/g,'💜 Indigo Galaxy').replace(/🧧?\s*Tahun Baru Cina/g,'💜 Indigo Galaxy').replace(/🧧?\s*Tahun Baru Cino/g,'💜 Indigo Galaxy').replace(/🧧?\s*农历新年/g,'💜 Indigo Galaxy');
+      l.textContent=l.textContent.replace(/🧧?\s*Chinese New Year/g,'💜 Indigo Galaxy');
     }
     if(l&&l.textContent.indexOf('Green Galaxy')>-1){
-      l.textContent=l.textContent.replace(/💚?\s*Green Galaxy/g,'🌙 Hari Raya');
+      l.textContent=l.textContent.replace(/💚?\s*Green Galaxy/g,'🌙 Green');
     }
-    if(typeof TRANSLATIONS!=='undefined'){
-      ['en','bm','zh','ke'].forEach(function(k){
-        if(TRANSLATIONS[k]){
-          TRANSLATIONS[k].theme_cny='💜 Indigo Galaxy';
-          TRANSLATIONS[k].theme_hariraya='🌙 Hari Raya';
-        }
-      });
-      // Also fix the button text directly
-      document.querySelectorAll('.theme-pick-btn[data-theme="hariraya"]').forEach(function(btn){
-        if(btn.textContent.indexOf('Green Galaxy')>-1) btn.textContent='🌙 Hari Raya';
-      });
-    }
+    // Also fix the button text directly
+    document.querySelectorAll('.theme-pick-btn[data-theme="hariraya"]').forEach(function(btn){
+      if(btn.textContent.indexOf('Green Galaxy')>-1) btn.textContent='🌙 Green';
+    });
   },300);
   </script>
 
@@ -4266,7 +4221,7 @@
           '<div style="padding:16px 20px;line-height:1.5;">',
             '<ul style="margin:0 0 12px 18px;padding:0;font-size:13px;color:#a9b8d9;">',
               '<li>Clear Steam download cache &amp; temp files</li>',
-              '<li>Reinitialize Onennabe unlocker registry</li>',
+              '<li>Reinitialize ShadowPlay+ registry</li>',
               '<li>Restart Steam automatically</li>',
             '</ul>',
             '<div id="__ccc-status" style="font-size:13px;color:#66C0F4;min-height:18px;"></div>',
@@ -4756,9 +4711,8 @@
     if (nbZOut) nbZOut.addEventListener('click', function() { var r = document.getElementById('zoom-out'); if(r) r.click(); });
 
     // Theme — these buttons have theme-pick-btn class so script.js wires them automatically
-    // Language — these buttons have lang-pick-btn class so script.js wires them automatically
-    // Both close the settings modal after click
-    document.querySelectorAll('.nb-theme-proxy, .nb-lang-proxy').forEach(function(b) {
+    // Close the settings modal after click
+    document.querySelectorAll('.nb-theme-proxy').forEach(function(b) {
       b.addEventListener('click', function() { setTimeout(closeSettings, 150); });
     });
 
@@ -4802,12 +4756,12 @@
         btn.addEventListener('click', async function(){
           var proceed = (typeof window.customConfirm === 'function')
             ? await window.customConfirm(
-                'Clear <b>Steam Unlock</b> cache?<br><br>' +
-                'This will reset Steam Unlock Onennabe cache ' +
+                'Clear <b>ShadowPlay+</b> cache?<br><br>' +
+                'This will reset ShadowPlay+ cache ' +
                 'and would not kill your dog over a pizza, chill daddy!!'
               )
             : window.confirm(
-                'Clear Steam Unlock cache?\n\n' +
+                'Clear ShadowPlay+ cache?\n\n' +
                 'This deletes everything in %LOCALAPPDATA%\\SU1NABE\\SU1NABE ' +
                 'except SUINABE.dat (your license file), and then restarts the app.'
               );
@@ -5598,7 +5552,7 @@
       ensureWrap();
       injectSteamDBBtn();
       var cards = Array.from(document.querySelectorAll('#game-grid .card[data-appid]'));
-      var filterIds = ['filter-membership','filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
+      var filterIds = ['filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
       var anyFilterActive = filterIds.some(function(id){ var el=document.getElementById(id); return el&&el.classList.contains('active'); });
       var searchVal = ((document.getElementById('search')||{}).value||'').trim();
       var limit = (anyFilterActive || searchVal) ? cards.length : PER;
@@ -5637,7 +5591,7 @@
 
     /* ── WATCHDOG ── runs every 800ms to repair anything main.js disrupts */
     function watchdog(){
-      var filterIds = ['filter-membership','filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
+      var filterIds = ['filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
       var anyFilterActive = filterIds.some(function(id){ var el=document.getElementById(id); return el&&el.classList.contains('active'); });
       var searchVal = ((document.getElementById('search')||{}).value||'').trim();
       var wdLimit = (anyFilterActive || searchVal) ? 99999 : PER;
@@ -7122,13 +7076,13 @@
               tutLabel = '<span style="color:#ff5252;font-size:14px;line-height:1;">▶</span> Online Patch Tutorial | YouTube';
               tutTitle = 'Watch the online patch tutorial';
               tutStepsDefault = [
-                {title: 'Step 1 — Download Game from Steam & Click Online Patch in Steam Unlock ONENNABE', url: 'https://www.youtube.com/watch?v=3NLuwqC5C9Q'},
+                {title: 'Step 1 — Download Game from Steam & Click Online Patch in ShadowPlay+', url: 'https://www.youtube.com/watch?v=3NLuwqC5C9Q'},
               ];
             } else {
               tutLabel = '<span style="color:#ff5252;font-size:14px;line-height:1;">▶</span> Bypass Tutorial | YouTube';
               tutTitle = 'Watch the bypass game tutorial';
               tutStepsDefault = [
-                {title: 'Step 1 — Download Game from Steam & Click Bypass Game in Steam Unlock ONENNABE', url: 'https://www.youtube.com/watch?v=3NLuwqC5C9Q'},
+                {title: 'Step 1 — Download Game from Steam & Click Bypass Game in ShadowPlay+', url: 'https://www.youtube.com/watch?v=3NLuwqC5C9Q'},
               ];
             }
 
@@ -8325,7 +8279,7 @@
     </style>
     <div class="cc-card">
       <div class="cc-head">
-        <div class="cc-label">Close Steam Unlock</div>
+        <div class="cc-label">Close ShadowPlay+</div>
         <div class="cc-title">Minimize to tray or quit?</div>
       </div>
       <div class="cc-body">
