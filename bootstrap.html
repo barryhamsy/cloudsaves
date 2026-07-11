@@ -1,674 +1,334 @@
-<!DOCTYPE html>
-
-<html lang="en">
-
-<head>
-
-  <meta charset="UTF-8">
-
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>Steam Unlock ONENNABE - System Boot</title>
-
-  <style>
-
-    :root {
-
-      --bg-dark: #020409;
-
-      --ps5-blue: #0072ce;
-
-      --glass-bg: rgba(255, 255, 255, 0.03);
-
-      --glass-border: rgba(255, 255, 255, 0.08);
-
-      --text-main: #ffffff;
-
-      --text-soft: rgba(255, 255, 255, 0.45);
-
-      --error-red: #ff4d4d;
-
-    }
-
-
-
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-
-
-    body {
-
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
-
-      background: var(--bg-dark);
-
-      color: var(--text-main);
-
-      min-height: 100vh;
-
-      display: flex;
-
-      align-items: center;
-
-      justify-content: center;
-
-      overflow: hidden;
-
-    }
-
-
-
-    /* --- PS5 Animated Aurora Background --- */
-
-    .atmo-layer {
-
-      position: fixed;
-
-      inset: 0;
-
-      z-index: -1;
-
-      background: radial-gradient(circle at 50% -20%, #1a2a6c 0%, transparent 50%),
-
-                  radial-gradient(circle at 0% 100%, #000000 0%, transparent 40%),
-
-                  radial-gradient(circle at 100% 100%, #09122b 0%, transparent 40%);
-
-    }
-
-
-
-    .aurora-blob {
-
-      position: absolute;
-
-      width: 60vw;
-
-      height: 60vw;
-
-      filter: blur(80px);
-
-      opacity: 0.15;
-
-      border-radius: 50%;
-
-      animation: drift 25s infinite alternate ease-in-out;
-
-    }
-
-    .blob-1 { background: #4facfe; top: -10%; left: -10%; animation-delay: 0s; }
-
-    .blob-2 { background: #00f2fe; bottom: -10%; right: -10%; animation-delay: -5s; }
-
-
-
-    @keyframes drift {
-
-      from { transform: translate(0, 0) scale(1); }
-
-      to { transform: translate(10%, 15%) scale(1.1); }
-
-    }
-
-
-
-    /* --- Glassmorphic Container --- */
-
-    .loader-container {
-
-      position: relative;
-
-      width: 440px;
-
-      padding: 60px 40px;
-
-      background: var(--glass-bg);
-
-      backdrop-filter: blur(30px) saturate(160%);
-
-      -webkit-backdrop-filter: blur(30px) saturate(160%);
-
-      border: 1px solid var(--glass-border);
-
-      border-radius: 40px;
-
-      text-align: center;
-
-      box-shadow: 0 25px 50px rgba(0,0,0,0.6);
-
-      z-index: 10;
-
-      transition: opacity 0.8s ease, transform 0.8s ease;
-
-    }
-
-
-
-    .loader-container.fade-out {
-
-      opacity: 0;
-
-      transform: scale(0.95) translateY(15px);
-
-    }
-
-
-
-    /* --- Liquid RGB Logo --- */
-
-    .logo-viewport {
-
-      position: relative;
-
-      width: 160px;
-
-      height: 160px;
-
-      margin: 0 auto 45px;
-
-    }
-
-
-
-    .liquid-rgb {
-
-      position: absolute;
-
-      inset: -12px;
-
-      border-radius: 50%;
-
-      background: conic-gradient(
-
-        from 0deg,
-
-        #ff0055, #ffdd00, #00ffaa, #0055ff, #cc00ff, #ff0055
-
-      );
-
-      filter: blur(15px);
-
-      animation: rgb-spin 4s linear infinite;
-
-      opacity: 0.65;
-
-    }
-
-
-
-    @keyframes rgb-spin { to { transform: rotate(360deg); } }
-
-
-
-    .logo-core {
-
-      position: absolute;
-
-      inset: 0;
-
-      background: rgba(10, 15, 25, 0.9);
-
-      backdrop-filter: blur(10px);
-
-      border-radius: 50%;
-
-      display: flex;
-
-      align-items: center;
-
-      justify-content: center;
-
-      border: 1px solid rgba(255,255,255,0.12);
-
-      box-shadow: inset 0 2px 10px rgba(255,255,255,0.05);
-
-      z-index: 2;
-
-    }
-
-
-
-    .logo-core span {
-
-      font-size: 52px;
-
-      font-weight: 100;
-
-      letter-spacing: -2px;
-
-      color: #fff;
-
-      opacity: 0.9;
-
-    }
-
-
-
-    /* --- Typography --- */
-
-    h1 {
-
-      font-size: 24px;
-
-      font-weight: 200;
-
-      letter-spacing: 7px;
-
-      text-transform: uppercase;
-
-      margin-bottom: 8px;
-
-    }
-
-
-
-    .subtitle {
-
-      font-size: 10px;
-
-      color: var(--ps5-blue);
-
-      text-transform: uppercase;
-
-      letter-spacing: 9px;
-
-      font-weight: 600;
-
-      margin-bottom: 40px;
-
-    }
-
-
-
-    .status-area {
-
-      min-height: 20px;
-
-      margin-bottom: 20px;
-
-    }
-
-
-
-    .status-text {
-
-      font-size: 13px;
-
-      color: var(--text-soft);
-
-      font-weight: 300;
-
-      letter-spacing: 0.5px;
-
-      transition: opacity 0.3s;
-
-    }
-
-
-
-    /* --- Progress & Error UI --- */
-
-    .progress-track {
-
-      width: 100%;
-
-      height: 3px;
-
-      background: rgba(255,255,255,0.05);
-
-      border-radius: 10px;
-
-      overflow: hidden;
-
-      margin-bottom: 10px;
-
-    }
-
-
-
-    .progress-fill {
-
-      width: 0%;
-
-      height: 100%;
-
-      background: linear-gradient(90deg, var(--ps5-blue), #00f2fe);
-
-      box-shadow: 0 0 15px rgba(0, 114, 206, 0.5);
-
-      transition: width 0.4s cubic-bezier(0.1, 0.7, 1.0, 0.1);
-
-    }
-
-
-
-    .error-ui {
-
-      display: none;
-
-      animation: fadeIn 0.4s ease;
-
-    }
-
-
-
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-
-
-    .retry-btn {
-
-      background: rgba(255,255,255,0.05);
-
-      border: 1px solid rgba(255,255,255,0.15);
-
-      color: #fff;
-
-      padding: 10px 25px;
-
-      border-radius: 8px;
-
-      cursor: pointer;
-
-      text-transform: uppercase;
-
-      font-size: 10px;
-
-      letter-spacing: 2px;
-
-      transition: all 0.2s;
-
-    }
-
-
-
-    .retry-btn:hover {
-
-      background: rgba(255,255,255,0.12);
-
-      border-color: var(--ps5-blue);
-
-    }
-
-  </style>
-
-</head>
-
-<body>
-
-
-
-  <div class="atmo-layer">
-
-    <div class="aurora-blob blob-1"></div>
-
-    <div class="aurora-blob blob-2"></div>
-
-  </div>
-
-
-
-  <div class="loader-container" id="boot-container">
-
-    <div class="logo-viewport">
-
-      <div class="liquid-rgb"></div>
-
-      <div class="logo-core"><span>SU</span></div>
-
-    </div>
-
-
-
-    <h1>Steam Unlock</h1>
-
-    <div class="subtitle">Onennabe</div>
-
-
-
-    <div class="status-area">
-
-      <div class="status-text" id="status">Initializing...</div>
-
-    </div>
-
-
-
-    <div id="progress-container">
-
-      <div class="progress-track">
-
-        <div class="progress-fill" id="progress-bar"></div>
-
-      </div>
-
-    </div>
-
-
-
-    <div class="error-ui" id="error-ui">
-
-      <p style="color: var(--error-red); font-size: 12px; margin-bottom: 15px;" id="error-msg">System link failure.</p>
-
-      <button class="retry-btn" onclick="location.reload()">Off VPN/WARP and Retry</button>
-
-    </div>
-
-  </div>
-
-
-
-  <script>
-
-    /**
-
-     * Logic configuration
-
-     */
-
-    const BOOT_CONFIG = {
-
-      minDisplayTime: 4000,
-
-      steps: [
-
-        { p: 20, m: 'Initializing system kernels...' },
-
-        { p: 45, m: 'Establishing secure link...' },
-
-        { p: 70, m: 'Fetching application data...' },
-
-        { p: 90, m: 'Processing interface...' },
-
-        { p: 100, m: 'System Ready' }
-
-      ]
-
-    };
-
-
-
-    class AppBootstrap {
-
-      constructor() {
-
-        this.statusEl = document.getElementById('status');
-
-        this.progressBar = document.getElementById('progress-bar');
-
-        this.container = document.getElementById('boot-container');
-
-        this.errorUI = document.getElementById('error-ui');
-
-        this.progContainer = document.getElementById('progress-container');
-
-        this.startTime = Date.now();
-
-        this.downloadedContent = null;
-
-      }
-
-
-
-      updateStatus(message) {
-
-        this.statusEl.style.opacity = 0;
-
-        setTimeout(() => {
-
-          this.statusEl.textContent = message;
-
-          this.statusEl.style.opacity = 1;
-
-        }, 200);
-
-      }
-
-
-
-      updateProgress(percent) {
-
-        this.progressBar.style.width = percent + '%';
-
-      }
-
-
-
-      showError(msg) {
-
-        this.statusEl.style.display = 'none';
-
-        this.progContainer.style.display = 'none';
-
-        this.errorUI.style.display = 'block';
-
-        document.getElementById('error-msg').textContent = msg;
-
-      }
-
-
-
-      /**
-
-       * Original Fetch Logic
-
-       */
-
-      async fetchApp() {
-
-        try {
-
-          // Replace with your actual endpoint
-
-          const response = await fetch('/api/bootstrap/index.html');
-
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-          this.downloadedContent = await response.text();
-
-        } catch (e) {
-
-          throw new Error('Could not connect to update server.');
-
-        }
-
-      }
-
-
-
-      async runSequence() {
-
-        try {
-
-          // Start download and animation in parallel
-
-          const downloadPromise = this.fetchApp();
-
-
-
-          for (const step of BOOT_CONFIG.steps) {
-
-            this.updateStatus(step.m);
-
-            this.updateProgress(step.p);
-
-            await this.sleep(800);
-
-          }
-
-
-
-          await downloadPromise;
-
-
-
-          // Ensure minimum time for visual polish
-
-          const elapsed = Date.now() - this.startTime;
-
-          if (elapsed < BOOT_CONFIG.minDisplayTime) {
-
-            await this.sleep(BOOT_CONFIG.minDisplayTime - elapsed);
-
-          }
-
-
-
-          this.complete();
-
-        } catch (error) {
-
-          this.showError(error.message);
-
-        }
-
-      }
-
-
-
-      sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-
-
-      complete() {
-
-        this.container.classList.add('fade-out');
-
-        setTimeout(() => {
-
-          if (this.downloadedContent) {
-
-            document.open();
-
-            document.write(this.downloadedContent);
-
-            document.close();
-
-          } else {
-
-            console.log("Bootstrap complete. Content would inject here.");
-
-          }
-
-        }, 800);
-
-      }
-
-    }
-
-
-
-    window.addEventListener('DOMContentLoaded', () => {
-
-      // Small delay before starting boot sequence
-
-      setTimeout(() => new AppBootstrap().runSequence(), 500);
-
-    });
-
-  </script>
-
-</body>
-
-</html>
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Steam Unlock ONENNABE - System Boot</title>
+  <!-- Steam client font (Motiva Sans), loaded from Steam's own CDN. See license note. -->
+  <link rel="stylesheet" href="https://community.akamai.steamstatic.com/public/shared/css/motiva_sans.css?l=english">
+  <style>
+    :root {
+      --steam-bg:        #1b2838;
+      --steam-bg-dark:   #171a21;
+      --steam-panel:     #2a475e;
+      --steam-blue:      #66c0f4;
+      --steam-blue-lit:  #1a9fff;
+      --steam-text:      #c7d5e0;
+      --steam-text-dim:  #8f98a0;
+      --error-red:       #e05a5a;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: "Motiva Sans", Sans-Serif;
+      background: var(--steam-bg-dark);
+      color: var(--steam-text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* --- Steam dark ambient background --- */
+    .atmo-layer {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background:
+        radial-gradient(ellipse 120% 80% at 50% -12%, #2a475e 0%, rgba(42,71,94,0) 55%),
+        linear-gradient(180deg, #1b2838 0%, #171a21 100%);
+    }
+    .atmo-glow {
+      position: absolute;
+      width: 70vw;
+      height: 70vw;
+      border-radius: 50%;
+      filter: blur(90px);
+      opacity: 0.12;
+      background: #1a9fff;
+      top: -25%;
+      left: 50%;
+      transform: translateX(-50%);
+      animation: pulse 6s ease-in-out infinite alternate;
+    }
+    @keyframes pulse {
+      from { opacity: 0.08; transform: translateX(-50%) scale(1); }
+      to   { opacity: 0.16; transform: translateX(-50%) scale(1.12); }
+    }
+
+    /* --- Steam-style panel --- */
+    .loader-container {
+      position: relative;
+      width: 420px;
+      padding: 48px 40px 40px;
+      background: rgba(23, 29, 38, 0.72);
+      border: 1px solid rgba(102, 192, 244, 0.12);
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.03);
+      z-index: 10;
+      transition: opacity 0.8s ease, transform 0.8s ease;
+    }
+    .loader-container.fade-out {
+      opacity: 0;
+      transform: scale(0.98) translateY(12px);
+    }
+
+    /* --- Steam "connecting" spinner around SU monogram --- */
+    .logo-viewport {
+      position: relative;
+      width: 118px;
+      height: 118px;
+      margin: 0 auto 34px;
+    }
+    .spinner-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 3px solid rgba(102, 192, 244, 0.10);
+      border-top-color: var(--steam-blue);
+      border-right-color: var(--steam-blue);
+      box-shadow: 0 0 26px rgba(102, 192, 244, 0.25);
+      animation: spin 1.1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .logo-core {
+      position: absolute;
+      inset: 14px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 32%, #1b2838, #0c1015);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(102, 192, 244, 0.15);
+      box-shadow: inset 0 2px 14px rgba(0,0,0,0.6);
+      z-index: 2;
+    }
+    .logo-core img {
+      width: 60%;
+      height: 60%;
+      object-fit: contain;
+      filter: drop-shadow(0 0 10px rgba(102, 192, 244, 0.35));
+    }
+
+    /* --- Typography --- */
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: 11px;
+      color: var(--steam-blue);
+      text-transform: uppercase;
+      letter-spacing: 7px;
+      font-weight: 500;
+      margin-bottom: 34px;
+    }
+
+    .status-area {
+      min-height: 18px;
+      margin-bottom: 18px;
+    }
+    .status-text {
+      font-size: 12px;
+      color: var(--steam-text-dim);
+      font-weight: 400;
+      letter-spacing: 0.4px;
+      transition: opacity 0.3s;
+    }
+
+    /* --- Steam-style progress bar --- */
+    .progress-track {
+      width: 100%;
+      height: 4px;
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--steam-blue-lit), var(--steam-blue));
+      box-shadow: 0 0 12px rgba(102, 192, 244, 0.6);
+      transition: width 0.4s cubic-bezier(0.1, 0.7, 1.0, 0.1);
+    }
+
+    /* --- Error UI --- */
+    .error-ui {
+      display: none;
+      animation: fadeIn 0.4s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .error-msg {
+      color: var(--error-red);
+      font-size: 12px;
+      margin-bottom: 15px;
+    }
+
+    .retry-btn {
+      background: linear-gradient(180deg, #3d6c8d, #2a475e);
+      border: 1px solid rgba(102, 192, 244, 0.22);
+      color: var(--steam-text);
+      padding: 10px 24px;
+      border-radius: 3px;
+      cursor: pointer;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 2px;
+      transition: all 0.2s;
+    }
+    .retry-btn:hover {
+      background: linear-gradient(180deg, #66c0f4, #417a9b);
+      border-color: var(--steam-blue);
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="atmo-layer">
+    <div class="atmo-glow"></div>
+  </div>
+
+  <div class="loader-container" id="boot-container">
+    <div class="logo-viewport">
+      <div class="spinner-ring"></div>
+      <div class="logo-core"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASoAAAEsCAYAAAB0Y/4yAAAACXBIWXMAAAsTAAALEwEAmpwYAAAFzGlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgMTAuMC1jMDAwIDI1LkcuZDIwZTQ2NiwgMjAyNS8xMi8wOC0yMDo1MDoyMSAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIgeG1sbnM6ZGM9Imh0dHA6Ly9wdXJsLm9yZy9kYy9lbGVtZW50cy8xLjEvIiB4bWxuczpwaG90b3Nob3A9Imh0dHA6Ly9ucy5hZG9iZS5jb20vcGhvdG9zaG9wLzEuMC8iIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDI3LjYgKFdpbmRvd3MpIiB4bXA6Q3JlYXRlRGF0ZT0iMjAyNi0wNy0xMlQwMTo0MDoyMiswODowMCIgeG1wOk1ldGFkYXRhRGF0ZT0iMjAyNi0wNy0xMlQwMTo0MDoyMiswODowMCIgeG1wOk1vZGlmeURhdGU9IjIwMjYtMDctMTJUMDE6NDA6MjIrMDg6MDAiIHhtcE1NOkluc3RhbmNlSUQ9InhtcC5paWQ6NTJkMDA0NDUtMGQ1MS0wOTRhLTk2NWQtMjA1ODM2OTFlM2NjIiB4bXBNTTpEb2N1bWVudElEPSJhZG9iZTpkb2NpZDpwaG90b3Nob3A6MDE0NTRjYjQtNWQyNC03YzRhLTlh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" alt="Steam Unlock Onennabe"></div>
+    </div>
+
+    <h1>Steam Unlock</h1>
+    <div class="subtitle">Onennabe</div>
+
+    <div class="status-area">
+      <div class="status-text" id="status">Initializing...</div>
+    </div>
+
+    <div id="progress-container">
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-bar"></div>
+      </div>
+    </div>
+
+    <div class="error-ui" id="error-ui">
+      <p class="error-msg" id="error-msg">System link failure.</p>
+      <button class="retry-btn" onclick="location.reload()">Off VPN/WARP and Retry</button>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * Logic configuration
+     */
+    const BOOT_CONFIG = {
+      minDisplayTime: 4000,
+      steps: [
+        { p: 20, m: 'Initializing system kernels...' },
+        { p: 45, m: 'Establishing secure link...' },
+        { p: 70, m: 'Fetching application data...' },
+        { p: 90, m: 'Processing interface...' },
+        { p: 100, m: 'System Ready' }
+      ]
+    };
+
+    class AppBootstrap {
+      constructor() {
+        this.statusEl = document.getElementById('status');
+        this.progressBar = document.getElementById('progress-bar');
+        this.container = document.getElementById('boot-container');
+        this.errorUI = document.getElementById('error-ui');
+        this.progContainer = document.getElementById('progress-container');
+        this.startTime = Date.now();
+        this.downloadedContent = null;
+      }
+
+      updateStatus(message) {
+        this.statusEl.style.opacity = 0;
+        setTimeout(() => {
+          this.statusEl.textContent = message;
+          this.statusEl.style.opacity = 1;
+        }, 200);
+      }
+
+      updateProgress(percent) {
+        this.progressBar.style.width = percent + '%';
+      }
+
+      showError(msg) {
+        this.statusEl.style.display = 'none';
+        this.progContainer.style.display = 'none';
+        this.errorUI.style.display = 'block';
+        document.getElementById('error-msg').textContent = msg;
+      }
+
+      /**
+       * Original Fetch Logic
+       */
+      async fetchApp() {
+        try {
+          // Replace with your actual endpoint
+          const response = await fetch('/api/bootstrap/index.html');
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          this.downloadedContent = await response.text();
+        } catch (e) {
+          throw new Error('Could not connect to update server.');
+        }
+      }
+
+      async runSequence() {
+        try {
+          // Start download and animation in parallel
+          const downloadPromise = this.fetchApp();
+
+          for (const step of BOOT_CONFIG.steps) {
+            this.updateStatus(step.m);
+            this.updateProgress(step.p);
+            await this.sleep(800);
+          }
+
+          await downloadPromise;
+
+          // Ensure minimum time for visual polish
+          const elapsed = Date.now() - this.startTime;
+          if (elapsed < BOOT_CONFIG.minDisplayTime) {
+            await this.sleep(BOOT_CONFIG.minDisplayTime - elapsed);
+          }
+
+          this.complete();
+        } catch (error) {
+          this.showError(error.message);
+        }
+      }
+
+      sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+      complete() {
+        this.container.classList.add('fade-out');
+        setTimeout(() => {
+          if (this.downloadedContent) {
+            document.open();
+            document.write(this.downloadedContent);
+            document.close();
+          } else {
+            console.log("Bootstrap complete. Content would inject here.");
+          }
+        }, 800);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      // Small delay before starting boot sequence
+      setTimeout(() => new AppBootstrap().runSequence(), 500);
+    });
+  </script>
+</body>
+</html>
