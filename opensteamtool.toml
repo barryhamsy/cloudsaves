@@ -78,3 +78,6 @@ timeout_recv_ms    = 10000
 # EOS matchmaking instead of Steam. Set to false to disable the
 # payload entirely; the 480 AppId swap for Steam-matchmaking games still works.
 enabled = true
+
+[cloud]
+enabled = true
