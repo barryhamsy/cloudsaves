@@ -81,3 +81,8 @@ enabled = true
 
 [cloud]
 enabled = true
+
+[stats]
+# Query the official stats API when no Lua setStat override exists.
+# Priority: setStat > stats API > hardcoded preset SteamID.
+enable_api = true
