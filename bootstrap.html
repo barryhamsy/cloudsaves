@@ -27,7 +27,7 @@
       position: relative;
     }
 
-    /* ── Real cover-art mosaic backdrop ── */
+    /* ââ Real cover-art mosaic backdrop ââ */
     .cover-grid {
       position: fixed;
       inset: -8%;
@@ -140,30 +140,6 @@
       transition: opacity 0.25s;
     }
 
-    .user-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      opacity: 0;
-      transition: opacity 0.6s ease 0.3s;
-    }
-    .user-row.show { opacity: 1; }
-    .user-avatar {
-      width: 32px;
-      height: 32px;
-      border-radius: 3px;
-      background: linear-gradient(135deg, #3a5a7a, #1a2a3a);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 13px;
-      font-weight: 700;
-      color: rgba(255,255,255,0.85);
-      flex-shrink: 0;
-      overflow: hidden;
-    }
-    .user-name { font-size: 13.5px; color: #d4dde6; font-weight: 500; }
-
     .progress-track {
       width: 220px;
       height: 3px;
@@ -221,11 +197,6 @@
       <div class="progress-fill" id="progress-bar"></div>
     </div>
 
-    <div class="user-row" id="user-row">
-      <div class="user-avatar" id="user-avatar">SU</div>
-      <div class="user-name">Steam Unlock ONENNABE</div>
-    </div>
-
     <div class="error-ui" id="error-ui">
       <p class="error-msg" id="error-msg">System link failure.</p>
       <button class="retry-btn" onclick="location.reload()">Off VPN/WARP and Retry</button>
@@ -233,8 +204,8 @@
   </div>
 
   <script>
-    // ── Real Steam cover art via Steam's public CDN (library capsule format) ──
-    // Same CDN used by Steam's own client — same technique as the Motiva Sans font link.
+    // ââ Real Steam cover art via Steam's public CDN (library capsule format) ââ
+    // Same CDN used by Steam's own client â same technique as the Motiva Sans font link.
     const COVER_APPIDS = [
       1245620, 1091500, 1174180, 292030, 1086940, 730, 570, 1938090,
       271590, 1332010, 1449850, 990080, 413150, 105600, 1145360, 1195080,
@@ -283,7 +254,7 @@
     }
     buildCoverGrid();
 
-    // ── Boot sequence ──
+    // ââ Boot sequence ââ
     const BOOT_CONFIG = {
       minDisplayTime: 3600,
       steps: [
@@ -302,10 +273,8 @@
         this.container = document.getElementById('boot-container');
         this.errorUI   = document.getElementById('error-ui');
         this.progWrap  = document.getElementById('progress-container');
-        this.userRow   = document.getElementById('user-row');
         this.startTime = Date.now();
         this.downloadedContent = null;
-        setTimeout(() => this.userRow.classList.add('show'), 500);
       }
 
       updateStatus(msg) {
@@ -318,7 +287,6 @@
       showError(msg) {
         this.statusEl.style.display = 'none';
         this.progWrap.style.display = 'none';
-        this.userRow.style.display = 'none';
         this.errorUI.style.display = 'block';
         document.getElementById('error-msg').textContent = msg;
       }
