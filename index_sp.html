@@ -1,6 +1,118 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script id="steamstore-fetch-fallback">
+    (function () {
+        if (window.__ssFallbackInstalled || !window.fetch) return;
+        window.__ssFallbackInstalled = true;
+        var origFetch = window.fetch.bind(window);
+        var RE = /\/api\/steamstore\/(\d+)(?:\?|$)/;   /* numeric appids only — skips /trending */
+        var good = {};  /* appid -> {cc, l} that worked this session, tried first next time */
+
+        function isOk(json, appid) {
+            var e = json && json[appid];
+            return !!(e && e.success && e.data);
+        }
+        /* Steam sometimes files the reply under a DIFFERENT key than the appid we asked
+           for — e.g. in some regions appids=3669870 (CONTROL Resonant) comes back as
+           {"4760190": {..., "data": {"steam_appid": 3669870}}} because the game is sold
+           there under a regional alias app. Every consumer reads json[appid], finds
+           nothing, and shows no info. Find the entry by data.steam_appid (or the single
+           entry present) and also file it under the requested appid. Returns true if
+           it changed anything. */
+        function normalize(json, appid) {
+            if (!json || typeof json !== 'object' || isOk(json, appid)) return false;
+            var keys = Object.keys(json), match = null, i, e;
+            for (i = 0; i < keys.length; i++) {
+                e = json[keys[i]];
+                if (e && e.success && e.data && String(e.data.steam_appid) === String(appid)) { match = e; break; }
+            }
+            if (!match && keys.length === 1) {
+                e = json[keys[0]];
+                if (e && e.success && e.data) match = e;
+            }
+            if (!match) return false;
+            json[appid] = match;
+            return true;
+        }
+        function withParams(url, cc, l) {
+            var u = new URL(url, location.href);
+            u.searchParams.set('cc', cc);
+            u.searchParams.set('l', l);
+            return u.pathname + u.search;
+        }
+        /* Diagnostics → Python console (existing /api/tp_log route prints "[TP-JS] ..."). */
+        function tpLog(msg) {
+            try { origFetch('/api/tp_log?msg=' + encodeURIComponent('[SS] ' + msg)); } catch (e) { }
+        }
+        function describe(json) {
+            if (!json || typeof json !== 'object') return String(json);
+            return Object.keys(json).map(function (k) {
+                var e = json[k] || {};
+                return k + ':' + (e.success ? 'ok' : 'fail') + (e.data && e.data.steam_appid ? '(steam_appid=' + e.data.steam_appid + ')' : '');
+            }).join(', ') || '{}';
+        }
+        tpLog('steamstore fallback v3 loaded');
+        function asResponse(json) {
+            return new Response(JSON.stringify(json), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+
+        window.fetch = function (input, init) {
+            var url = typeof input === 'string' ? input : (input && input.url) || '';
+            var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+            var m = url.match(RE);
+            if (!m || method !== 'GET') return origFetch(input, init);
+
+            var appid = m[1];
+            return origFetch(input, init).then(function (resp) {
+                return resp.clone().json().then(function (json) {
+                    if (normalize(json, appid)) {                          /* alias key fixed */
+                        tpLog(appid + ' alias-key fixed: ' + describe(json));
+                        return asResponse(json);
+                    }
+                    if (isOk(json, appid)) return resp;
+
+                    var u = new URL(url, location.href);
+                    var cc = (u.searchParams.get('cc') || 'us').toLowerCase();
+                    var l = u.searchParams.get('l') || 'en';
+                    var altL = (l === 'english') ? 'en' : 'english';   /* same language to Steam, new cache key */
+                    var tries = [];
+                    if (good[appid]) tries.push(good[appid]);
+                    /* Empty cc = "no region": the backend passes it straight to Steam, which then
+                       picks the storefront from your location — the same as opening
+                       appdetails?appids=<id> in a browser (the request that works for
+                       CONTROL Resonant). Also a fresh backend cache key. */
+                    if (cc !== '') tries.push({ cc: '', l: l });
+                    if (cc !== 'us') tries.push({ cc: 'us', l: l });   /* region fallback */
+                    tries.push({ cc: cc, l: altL });                   /* bypass a stuck cache entry */
+                    tries.push({ cc: '', l: altL });
+                    if (cc !== 'us') tries.push({ cc: 'us', l: altL });
+
+                    tpLog(appid + ' first reply (' + cc + '/' + l + '): ' + describe(json));
+                    var i = 0;
+                    function next() {
+                        if (i >= tries.length) {                       /* give up: original response */
+                            tpLog(appid + ' GAVE UP - no variant returned data');
+                            return resp;
+                        }
+                        var t = tries[i++];
+                        return origFetch(withParams(url, t.cc, t.l), { cache: 'no-store' })
+                            .then(function (r) { return r.json(); })
+                            .then(function (j) {
+                                normalize(j, appid);
+                                tpLog(appid + ' retry ' + (t.cc || '(no region)') + '/' + t.l + ': ' + describe(j));
+                                if (!isOk(j, appid)) return next();
+                                good[appid] = t;
+                                j[appid]._fallback = (t.cc || 'auto') + '/' + t.l;
+                                return asResponse(j);
+                            }, next);
+                    }
+                    return next();
+                }, function () { return resp; });   /* not JSON — pass through untouched */
+            });
+        };
+    })();
+    </script>
   <link rel="stylesheet" href="styles.css" />
   <!-- HLS support - FIXED: removed trailing spaces in URLs -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -67,7 +179,7 @@
   }
 
   /* ── NAVBAR ── */
-  :root { --nb-h: 80px; --nb-tab-h: 45px; }
+  :root { --nb-h: 60px; --nb-tab-h: 45px; }
   #top-navbar {
     position: fixed; top: 0; left: 0; right: 0; height: var(--nb-h); z-index: 9500;
     display: flex; align-items: stretch;
@@ -87,7 +199,7 @@
     padding: 0 14px; border-right: 1px solid rgba(255,255,255,0.07);
     flex-shrink: 0;
   }
-  #nb-logo img { height: 80px; width: auto; object-fit: contain; }
+  #nb-logo img { height: 50px; width: auto; object-fit: contain; }
   #nb-logo span { font-size: 12px; font-weight: 800; color: #66C0F4; letter-spacing: 0.5px; }
   #nb-nav {
     display: flex; align-items: stretch; flex: 1;
@@ -600,7 +712,7 @@
       <button class="nb-btn danger" id="nb-restart-proxy">Restart Steam</button>
       <button class="nb-btn" id="nb-clear-cache-btn" title="Clear cached app data (keeps your license)">Clear App Cache</button>
       <button class="nb-btn danger" id="nb-remove-proxy">Remove All</button>
-      <button class="nb-btn accent" id="nb-unlock-proxy">Unlock Top 5k</button>
+      <!-- <button class="nb-btn accent" id="nb-unlock-proxy">Unlock Top 5k</button> -->
     </div>
 
     <!-- Right: Cart + Steam Profile -->
@@ -654,7 +766,7 @@
   </div>
 
   <!-- Offline Banner -->
-  <div id="offline-banner" style="display:none;position:sticky;top:0;z-index:9999;background:#2b2f3a;color:#ffeb3b;padding:8px 12px;font-weight:600;border-bottom:1px solid rgba(255,255,255,.12);">
+  <div id="offline-banner" data-i18n="offline_banner" style="display:none;position:sticky;top:0;z-index:9999;background:#2b2f3a;color:#ffeb3b;padding:8px 12px;font-weight:600;border-bottom:1px solid rgba(255,255,255,.12);">
     API is offline — showing cached list. Latest games not loaded.
   </div>
 
@@ -676,18 +788,18 @@
     <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Close sidebar">×</button>
     <!-- Sidebar Tools -->
     <details id="sidebar-tools" class="sidebar-accordion">
-      <summary><span>Settings</span><span class="chev" aria-hidden="true">▸</span></summary>
+      <summary><span data-i18n="settings">Settings</span><span class="chev" aria-hidden="true">▸</span></summary>
       <div class="accordion-body">
         <div class="sidebar-section">
           <div class="toggle-row">
-            <span class="toggle-label">Parental Control</span>
+            <span class="toggle-label" data-i18n="parental_control">Parental Control</span>
             <label class="switch"><input type="checkbox" id="pc-toggle" aria-label="Parental Control"><span class="slider round"></span></label>
           </div>
-          <small class="toggle-hint">Hide Adult Content</small>
+          <small class="toggle-hint" data-i18n="hide_adult">Hide Adult Content</small>
         </div>
         <div class="sidebar-section">
           <div class="zoom-controls">
-            <span class="toggle-hint">Resize UI</span>
+            <span class="toggle-hint" data-i18n="resize_ui">Resize UI</span>
             <div class="zoom-buttons">
               <button id="zoom-out" class="chip subtle">−</button>
               <button id="zoom-in" class="chip subtle">＋</button>
@@ -695,28 +807,41 @@
           </div>
         </div>
         <div>
-          <button id="activate-btn" class="sidebar-btn">Activate App</button>
-          <button id="btn-delete-cdkey" class="sidebar-btn danger">Reset Activation</button>
+          <button id="activate-btn" class="sidebar-btn" data-i18n="activate_app">Activate App</button>
+          <button id="btn-delete-cdkey" class="sidebar-btn danger" data-i18n="reset_activation">Reset Activation</button>
         </div>
       </div>
     </details>
     <!-- Theme Picker -->
     <details id="sidebar-theme" class="sidebar-accordion">
-      <summary><span>🎨 Theme</span><span class="chev" aria-hidden="true">▸</span></summary>
+      <summary><span data-i18n="theme_label">🎨 Theme</span><span class="chev" aria-hidden="true">▸</span></summary>
       <div class="accordion-body">
         <div class="sidebar-section">
-          <small class="toggle-hint">Choose your store theme</small>
+          <small class="toggle-hint" data-i18n="choose_theme">Choose your store theme</small>
           <div id="theme-btn-group" class="theme-btn-group" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
             <button class="sidebar-btn theme-pick-btn" data-theme="original">🎮 Original</button>
             <button class="sidebar-btn theme-pick-btn" data-theme="cny">💜 Indigo Galaxy</button>
-            <button class="sidebar-btn theme-pick-btn" data-theme="hariraya">🌙 Green</button>
+            <button class="sidebar-btn theme-pick-btn" data-theme="hariraya">🌙 Hari Raya</button>
           </div>
           <div id="theme-active-label" style="margin-top:8px;font-size:11px;color:#888;text-align:center;"></div>
         </div>
       </div>
     </details>
-     <button id="refresh-games-btn" class="sidebar-btn">Refresh Game List</button>
-    <button id="show-installed-btn" class="sidebar-btn">Show Unlocked Games</button>
+    <!-- Language Switcher -->
+    <details id="sidebar-language" class="sidebar-accordion">
+      <summary><span data-i18n="language_label">🌐 Language</span><span class="chev" aria-hidden="true">▸</span></summary>
+      <div class="accordion-body">
+        <div class="sidebar-section">
+          <small class="toggle-hint" data-i18n="choose_language">Choose your language</small>
+          <div id="lang-btn-group" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+            <button class="sidebar-btn lang-pick-btn" data-lang="th">🇹🇭 ไทย</button>
+          </div>
+          <div id="lang-active-label" style="margin-top:8px;font-size:11px;color:#888;text-align:center;"></div>
+        </div>
+      </div>
+    </details>
+     <button id="refresh-games-btn" class="sidebar-btn" data-i18n="refresh_games">Refresh Game List</button>
+    <button id="show-installed-btn" class="sidebar-btn" data-i18n="show_installed">Show Unlocked Games</button>
     <button id="downloaded-games-btn" class="sidebar-btn" style="background:linear-gradient(135deg,#2e7d32,#1b5e20);margin-top:6px;">📦 Downloaded Games</button>
     <button id="tools-modal-btn" class="sidebar-btn">
       🛠️ Tools
@@ -796,7 +921,13 @@
         <div style="background:linear-gradient(135deg,#12192a,#1a2340);border:1px solid rgba(102,192,244,0.12);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;">
           <button class="sidebar-btn theme-pick-btn nb-theme-proxy" data-theme="original">🎮 Original</button>
           <button class="sidebar-btn theme-pick-btn nb-theme-proxy" data-theme="cny">💜 Indigo Galaxy</button>
-          <button class="sidebar-btn theme-pick-btn nb-theme-proxy" data-theme="hariraya">🌙 Green</button>
+          <button class="sidebar-btn theme-pick-btn nb-theme-proxy" data-theme="hariraya">🌙 Hari Raya</button>
+        </div>
+
+        <!-- Language -->
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.35);padding:4px 2px 0;">Language</div>
+        <div style="background:linear-gradient(135deg,#12192a,#1a2340);border:1px solid rgba(102,192,244,0.12);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;">
+          <button class="sidebar-btn lang-pick-btn nb-lang-proxy" data-lang="th">🇹🇭 ไทย</button>
         </div>
 
       </div>
@@ -1399,6 +1530,9 @@
       Games <span class="sf-active-dot"></span> <span class="sf-caret">▾</span>
     </button>
     <div class="sf-dd-panel">
+      <div class="sf-dd-item" id="sf-item-membership" onclick="sfClick('filter-membership','sf-dd-games')">
+        <span class="sf-check">✓</span> Denuvo Games
+      </div>
       <div class="sf-dd-item" id="sf-item-top" onclick="sfClick('filter-top-downloads','sf-dd-games')">
         <span class="sf-check">✓</span> Top 20 Downloads
       </div>
@@ -1418,6 +1552,9 @@
       </div>
       <div class="sf-dd-item" id="sf-item-bypass" onclick="sfClick('filter-bypass','sf-dd-features')">
         <span class="sf-check">✓</span> Bypass Available
+      </div>
+      <div class="sf-dd-item" id="sf-item-hypervisor" onclick="sfClick('filter-hypervisor','sf-dd-features')">
+        <span class="sf-check">✓</span> <span style="color:#c084fc;">⚙️ Hypervisor Bypass</span>
       </div>
     </div>
   </div>
@@ -1442,7 +1579,7 @@
 
   <!-- Search -->
   <div id="sf-search-wrap">
-    <input id="sf-search-input" type="search" placeholder="Search games…" oninput="sfSyncSearch(this.value)" />
+    <input id="sf-search-input" type="search" placeholder="ค้นหาเกม…" oninput="sfSyncSearch(this.value)" />
     <button id="sf-search-icon">🔍</button>
   </div>
 
@@ -1450,11 +1587,13 @@
 
 <!-- Original search-bar — HIDDEN, kept for script.js ID compatibility -->
 <div class="search-bar" style="display:none!important;">
-  <input id="search" type="search" placeholder="Search by AppID or Game Name..." />
+  <input id="search" type="search" data-i18n-placeholder="search_placeholder" placeholder="ค้นหาด้วย AppID หรือชื่อเกม..." />
   <div class="filter-row" id="filter-row">
+    <button id="filter-membership" class="chip">Denuvo Games</button>
     <button id="filter-top-downloads" class="chip">Top 20 Downloads</button>
     <button id="filter-online" class="chip">Online Supported</button>
     <button id="filter-bypass" class="chip">Bypass Available</button>
+    <button id="filter-hypervisor" class="chip">⚙️ Hypervisor Bypass</button>
     <button id="filter-clear" class="chip subtle">Clear</button>
     <button id="toggle-genre" class="chip subtle">Show Genre Filter</button>
     <div id="genre-row" class="genre-row"></div>
@@ -1506,6 +1645,7 @@
 
   // Map: visual item ID → real button ID
   var itemMap = {
+    'sf-item-membership': 'filter-membership',
     'sf-item-top':        'filter-top-downloads',
     'sf-item-online':     'filter-online',
     'sf-item-bypass':     'filter-bypass',
@@ -1523,7 +1663,7 @@
     });
 
     // Update dropdown headers with active dot
-    var gamesActive = ['sf-item-top'].some(function(id) {
+    var gamesActive = ['sf-item-membership','sf-item-top'].some(function(id) {
       return document.getElementById(id) && document.getElementById(id).classList.contains('checked');
     });
     var featActive = ['sf-item-online','sf-item-bypass','sf-item-hypervisor'].some(function(id) {
@@ -1597,7 +1737,7 @@
       });
     }
     // Also observe real button class changes for external triggers
-    var realBtns = ['filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
+    var realBtns = ['filter-membership','filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
     realBtns.forEach(function(id) {
       var btn = document.getElementById(id);
       if (btn) {
@@ -1662,12 +1802,12 @@
     </div>
     <div id="game-grid" class="grid"></div>
     <div class="pagination">
-      <button id="prev">← Previous</button>
+      <button id="prev" data-i18n="btn_prev">← Previous</button>
       <span id="page-label">Page 1 of 1</span>
-      <button id="next">Next →</button>
+      <button id="next" data-i18n="btn_next">Next →</button>
       <div class="jump-to-page">
         <input type="number" id="jump-to-page-input" min="1" placeholder="1-100" aria-label="Jump to page number" />
-        <button id="jump-to-page-btn" title="Jump to page">Go</button>
+        <button id="jump-to-page-btn" title="Jump to page" data-i18n="btn_go">Go</button>
       </div>
     </div>
   </div>
@@ -1681,29 +1821,29 @@
         <div class="act-profile">
           <img id="modal-avatar" class="act-avatar" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100%25' height='100%25' rx='40' ry='40' fill='%23222'/><text x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-family='Helvetica Neue' font-size='14'>STEAM</text></svg>" alt="Steam avatar" />
           <div class="act-id">
-            <h2 id="activation-title" class="act-title">Activate Application</h2>
+            <h2 id="activation-title" class="act-title" data-i18n="activate_title">Activate Application</h2>
             <div id="modal-persona" class="act-persona">Unknown Steam User</div>
             <div class="act-steamid"><span class="act-k">SteamID</span><span id="modal-steamid" class="act-v">UNKNOWN</span></div>
           </div>
         </div>
       </div>
-      <p id="activation-desc" class="act-desc">Enter your ShadowPlay+ CD Key to activate for this Steam account. This will bind your Steam ID with the CDKEY.<br>PLEASE ENSURE YOU ARE LOGGING IN USING CORRECT STEAM ACCOUNT. <br>WE WILL NOT ASSIST IF YOU MADE A MISTAKE BINDING THE WRONG ACCOUNT!</p>
-      <label id="modal-cdkey-label" for="modal-cdkey" class="act-label">CD Key</label>
-      <input id="modal-cdkey" class="act-input" type="text" placeholder="Enter CD Key" autocomplete="off" />
+      <p id="activation-desc" class="act-desc" data-i18n="activation_desc">Enter your ShadowPlay+ CD Key to activate for this Steam account. This will bind your Steam ID with the CDKEY.<br>PLEASE ENSURE YOU ARE LOGGING IN USING CORRECT STEAM ACCOUNT. <br>WE WILL NOT ASSIST IF YOU MADE A MISTAKE BINDING THE WRONG ACCOUNT!</p>
+      <label id="modal-cdkey-label" for="modal-cdkey" class="act-label" data-i18n="cdkey_label">CD Key</label>
+      <input id="modal-cdkey" class="act-input" type="text" data-i18n-placeholder="cdkey_placeholder" placeholder="Enter CD Key" autocomplete="off" />
       <div id="modal-activation-info" class="act-info"></div>
       <div class="modal-actions act-actions">
-        <button id="modal-confirm" class="btn-confirm">Activate</button>
-        <button id="modal-cancel" class="btn-cancel">Cancel</button>
+        <button id="modal-confirm" class="btn-confirm" data-i18n="btn_activate">Activate</button>
+        <button id="modal-cancel" class="btn-cancel" data-i18n="btn_cancel">Cancel</button>
       </div>
       <p id="modal-feedback" class="feedback act-feedback"></p>
     </div>
   </div>
 
   <!-- Notification Modals -->
-  <div id="download-complete-modal" class="notification-modal" style="display:none;"><div class="notification-content">✅ Download Completed</div></div>
-  <div id="loading-modal" class="notification-modal" style="display:none;"><div class="notification-content" id="loading-content">Downloading... Please wait</div></div>
-  <div id="details-loading-modal" class="notification-modal" style="display:none;"><div class="notification-content">Loading game details...</div></div>
-  <div id="remove-complete-modal" class="notification-modal" style="display:none;"><div class="notification-content" style="background:#c62828;">❌ Game Removed</div></div>
+  <div id="download-complete-modal" class="notification-modal" style="display:none;"><div class="notification-content" data-i18n="download_complete">✅ Download Completed</div></div>
+  <div id="loading-modal" class="notification-modal" style="display:none;"><div class="notification-content" id="loading-content" data-i18n="downloading">Downloading... Please wait</div></div>
+  <div id="details-loading-modal" class="notification-modal" style="display:none;"><div class="notification-content" data-i18n="loading_details">Loading game details...</div></div>
+  <div id="remove-complete-modal" class="notification-modal" style="display:none;"><div class="notification-content" style="background:#c62828;" data-i18n="game_removed">❌ Game Removed</div></div>
 
   <!-- Game Details Modal -->
   <div id="details-modal"><div id="details-modal-content"><button id="details-modal-close" aria-label="Close details modal">&times;</button><div id="details-modal-img-container"><img id="details-modal-img" src="" alt="Game Cover" /></div><div id="details-modal-body"></div></div></div>
@@ -1723,35 +1863,35 @@
       <div><svg style="animation:spin 1s linear infinite;" width="44" height="44" viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" stroke="#4caf50" stroke-width="5" fill="none" opacity="0.12"/><path d="M44 24a20 20 0 1 0-4.65 12.88" fill="none" stroke="#4caf50" stroke-width="5" stroke-linecap="round" stroke-dasharray="60 80"/></svg></div>
       <progress id="bulk-download-progress" value="0" max="500" style="width:95%;height:16px;border-radius:8px;appearance:none;"></progress>
       <div id="bulk-download-label" style="font-size:0.99rem;color:#4caf50;"></div>
-      <button id="bulk-cancel-btn" class="btn-cancel" style="margin-top:12px;">Cancel</button>
+      <button id="bulk-cancel-btn" class="btn-cancel" style="margin-top:12px;" data-i18n="btn_cancel">Cancel</button>
     </div>
   </div>
 
   <!-- Bulk AppID Modal -->
-  <div id="bulk-appid-modal" class="modal"><div class="modal-content"><h3>Adding your games</h3><p id="bulk-progress-text">Starting...</p><progress id="bulk-progress-bar" value="0" max="100" style="width:100%; height:20px; border-radius: 8px;"></progress><button id="bulk-appidcancel-btn" class="btn-cancel">Cancel</button></div></div>
+  <div id="bulk-appid-modal" class="modal"><div class="modal-content"><h3 data-i18n="adding_games">Adding your games</h3><p id="bulk-progress-text" data-i18n="starting">Starting...</p><progress id="bulk-progress-bar" value="0" max="100" style="width:100%; height:20px; border-radius: 8px;"></progress><button id="bulk-appidcancel-btn" class="btn-cancel" data-i18n="btn_cancel">Cancel</button></div></div>
 
   <!-- SteamID Mismatch Modal -->
   <div id="steamid-mismatch-modal" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="steamid-mismatch-title" style="display:none;">
     <div class="modal-content modal-pro">
-      <div class="modal-pro__header"><div class="modal-pro__badge">Security</div><h2 id="steamid-mismatch-title" class="modal-pro__title">Steam Account Mismatch</h2><p class="modal-pro__subtitle">This app is activated for a different Steam account. Please switch to the correct account to continue.</p></div>
+      <div class="modal-pro__header"><div class="modal-pro__badge" data-i18n="security">Security</div><h2 id="steamid-mismatch-title" class="modal-pro__title" data-i18n="mismatch_title">Steam Account Mismatch</h2><p class="modal-pro__subtitle" data-i18n="mismatch_subtitle">This app is activated for a different Steam account. Please switch to the correct account to continue.</p></div>
       <div class="modal-pro__grid">
-        <div class="profile-card"><div class="profile-card__label">Currently signed in</div><div class="profile-card__row"><img id="mismatch-current-avatar" class="profile-card__avatar" alt="Current Steam avatar" src="" onerror="this.style.display='none'"><div class="profile-card__meta"><div id="mismatch-current-persona" class="profile-card__name">Unknown Steam User</div><div class="profile-card__sub">SteamID: <span id="current-steamid">UNKNOWN</span></div></div></div></div>
-        <div class="profile-card profile-card--warn"><div class="profile-card__label">Activated for</div><div class="profile-card__row"><img id="mismatch-activated-avatar" class="profile-card__avatar" alt="Activated Steam avatar" src="" onerror="this.style.display='none'"><div class="profile-card__meta"><div id="mismatch-activated-persona" class="profile-card__name">Unknown Steam User</div><div class="profile-card__sub">SteamID: <span id="activated-steamid">UNKNOWN</span></div></div></div></div>
+        <div class="profile-card"><div class="profile-card__label" data-i18n="currently_signed">Currently signed in</div><div class="profile-card__row"><img id="mismatch-current-avatar" class="profile-card__avatar" alt="Current Steam avatar" src="" onerror="this.style.display='none'"><div class="profile-card__meta"><div id="mismatch-current-persona" class="profile-card__name">Unknown Steam User</div><div class="profile-card__sub">SteamID: <span id="current-steamid">UNKNOWN</span></div></div></div></div>
+        <div class="profile-card profile-card--warn"><div class="profile-card__label" data-i18n="activated_for">Activated for</div><div class="profile-card__row"><img id="mismatch-activated-avatar" class="profile-card__avatar" alt="Activated Steam avatar" src="" onerror="this.style.display='none'"><div class="profile-card__meta"><div id="mismatch-activated-persona" class="profile-card__name">Unknown Steam User</div><div class="profile-card__sub">SteamID: <span id="activated-steamid">UNKNOWN</span></div></div></div></div>
       </div>
-      <div class="modal-pro__note">Tip: After switching Steam account, restart the app (or press the button below).</div>
-      <div class="modal-actions modal-pro__actions"><button id="restart-steam-btn-modal" class="sidebar-btn">Restart Steam & Switch Account</button></div>
+      <div class="modal-pro__note" data-i18n="mismatch_tip">Tip: After switching Steam account, restart the app (or press the button below).</div>
+      <div class="modal-actions modal-pro__actions"><button id="restart-steam-btn-modal" class="sidebar-btn" data-i18n="restart_steam">Restart Steam & Switch Account</button></div>
     </div>
   </div>
 
   <!-- Refresh Game List Modal -->
-  <div id="refresh-list-modal" style="display:none;position:fixed;inset:0;top:0;left:0;right:0;bottom:0;width:100vw;height:100vh;z-index:99999;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);backdrop-filter:blur(5px);"><style>#refresh-list-modal .rl-card{background:linear-gradient(180deg,#1b2838,#171a21);border:1px solid rgba(102,192,244,0.22);border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,0.6);overflow:hidden;padding:24px 26px;min-width:340px;max-width:480px;font-family:'Motiva Sans',Arial,sans-serif;}#refresh-list-modal .rl-head{display:flex;align-items:center;gap:14px;margin-bottom:18px;}#refresh-list-modal #refresh-anim circle{stroke:#66C0F4!important;}#refresh-list-modal #refresh-anim path,#refresh-list-modal #refresh-anim polyline{stroke:#66C0F4!important;}#refresh-list-modal .rl-label{font-size:11px;color:#66C0F4;text-transform:uppercase;letter-spacing:2px;font-weight:700;margin:0 0 4px;text-align:left;}#refresh-list-modal .rl-sub{font-size:13px;color:#c7d5e0;line-height:1.4;text-align:left;}#refresh-list-modal .rl-bar-wrap{width:100%;height:18px;background:#000;border-radius:2px;overflow:hidden;border:1px solid rgba(102,192,244,0.15);position:relative;}#refresh-list-modal #refresh-progress-bar{display:block;width:100%;height:100%;border:none;background:transparent;appearance:none;-webkit-appearance:none;}#refresh-list-modal #refresh-progress-bar::-webkit-progress-bar{background:transparent;}#refresh-list-modal #refresh-progress-bar::-webkit-progress-value{background:linear-gradient(90deg,#417a9b,#66C0F4,#7DD4FF);box-shadow:0 0 8px rgba(102,192,244,0.5);transition:width 0.2s;}#refresh-list-modal #refresh-progress-bar::-moz-progress-bar{background:linear-gradient(90deg,#417a9b,#66C0F4);}#refresh-list-modal #refresh-progress-label{font-size:11px;color:#8ba5be;letter-spacing:.3px;margin-top:8px;text-align:left;display:block;}</style><div class="rl-card"><div class="rl-head"><svg id="refresh-anim" width="32" height="32" viewBox="0 0 48 48" style="animation:spin 1s linear infinite;flex-shrink:0;"><circle cx="24" cy="24" r="20" stroke="#66C0F4" stroke-width="5" fill="none" opacity="0.18"/><path d="M44 24a20 20 0 1 0-4.65 12.88" fill="none" stroke="#66C0F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="60 80"/><polyline points="41,34 44,37 47,32" fill="none" stroke="#66C0F4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><div style="flex:1;min-width:0;"><div class="rl-label">Refreshing Game List</div><div class="rl-sub">Please wait while we fetch the latest games for you.</div></div></div><div class="rl-bar-wrap"><progress id="refresh-progress-bar" value="0" max="100"></progress></div><div id="refresh-progress-label">Starting…</div></div></div>
+  <div id="refresh-list-modal" style="display:none;position:fixed;inset:0;top:0;left:0;right:0;bottom:0;width:100vw;height:100vh;z-index:99999;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);backdrop-filter:blur(5px);"><style>#refresh-list-modal .rl-card{background:linear-gradient(180deg,#1b2838,#171a21);border:1px solid rgba(102,192,244,0.22);border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,0.6);overflow:hidden;padding:24px 26px;min-width:340px;max-width:480px;font-family:'Motiva Sans',Arial,sans-serif;}#refresh-list-modal .rl-head{display:flex;align-items:center;gap:14px;margin-bottom:18px;}#refresh-list-modal #refresh-anim circle{stroke:#66C0F4!important;}#refresh-list-modal #refresh-anim path,#refresh-list-modal #refresh-anim polyline{stroke:#66C0F4!important;}#refresh-list-modal .rl-label{font-size:11px;color:#66C0F4;text-transform:uppercase;letter-spacing:2px;font-weight:700;margin:0 0 4px;text-align:left;}#refresh-list-modal .rl-sub{font-size:13px;color:#c7d5e0;line-height:1.4;text-align:left;}#refresh-list-modal .rl-bar-wrap{width:100%;height:18px;background:#000;border-radius:2px;overflow:hidden;border:1px solid rgba(102,192,244,0.15);position:relative;}#refresh-list-modal #refresh-progress-bar{display:block;width:100%;height:100%;border:none;background:transparent;appearance:none;-webkit-appearance:none;}#refresh-list-modal #refresh-progress-bar::-webkit-progress-bar{background:transparent;}#refresh-list-modal #refresh-progress-bar::-webkit-progress-value{background:linear-gradient(90deg,#417a9b,#66C0F4,#7DD4FF);box-shadow:0 0 8px rgba(102,192,244,0.5);transition:width 0.2s;}#refresh-list-modal #refresh-progress-bar::-moz-progress-bar{background:linear-gradient(90deg,#417a9b,#66C0F4);}#refresh-list-modal #refresh-progress-label{font-size:11px;color:#8ba5be;letter-spacing:.3px;margin-top:8px;text-align:left;display:block;}</style><div class="rl-card"><div class="rl-head"><svg id="refresh-anim" width="32" height="32" viewBox="0 0 48 48" style="animation:spin 1s linear infinite;flex-shrink:0;"><circle cx="24" cy="24" r="20" stroke="#66C0F4" stroke-width="5" fill="none" opacity="0.18"/><path d="M44 24a20 20 0 1 0-4.65 12.88" fill="none" stroke="#66C0F4" stroke-width="5" stroke-linecap="round" stroke-dasharray="60 80"/><polyline points="41,34 44,37 47,32" fill="none" stroke="#66C0F4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><div style="flex:1;min-width:0;"><div class="rl-label" data-i18n="refreshing">Refreshing Game List</div><div class="rl-sub" data-i18n="please_wait">Please wait while we fetch the latest games for you.</div></div></div><div class="rl-bar-wrap"><progress id="refresh-progress-bar" value="0" max="100"></progress></div><div id="refresh-progress-label" data-i18n="starting">Starting…</div></div></div>
 
   <!-- Custom Confirm Modal -->
-  <div id="custom-confirm-modal" class="modal"><div class="notification-content" style="min-width:400px;text-align:center;"><div id="custom-confirm-msg" style="margin-bottom:10px; font-size:1.1rem;"></div><div style="display:flex;justify-content:center;gap:5px;"><button id="custom-confirm-ok" class="btn-confirm">OK</button><button id="custom-confirm-cancel" class="btn-cancel">Cancel</button></div></div></div>
+  <div id="custom-confirm-modal" class="modal"><div class="notification-content" style="min-width:400px;text-align:center;"><div id="custom-confirm-msg" style="margin-bottom:10px; font-size:1.1rem;"></div><div style="display:flex;justify-content:center;gap:5px;"><button id="custom-confirm-ok" class="btn-confirm" data-i18n="btn_ok">OK</button><button id="custom-confirm-cancel" class="btn-cancel" data-i18n="btn_cancel">Cancel</button></div></div></div>
 
   <!-- Cart Review Modal -->
   <div id="cart-review-modal" class="modal" tabindex="-1" aria-modal="true" style="display:none;">
-    <div class="modal-content cart-modal-content"><h2 style="text-align:center; margin-bottom:16px;">🛒 Review Your Cart</h2><div id="cart-list-container"><ul id="cart-list" class="cart-list"></ul><p id="cart-empty-msg" class="cart-empty-msg">Your cart is empty.</p></div><div class="modal-actions cart-modal-actions"><button id="cart-cancel-btn" class="btn-cancel">Cancel</button><button id="cart-download-btn" class="btn-confirm"><span style="font-weight:600;">Download Cart</span>(<span id="cart-modal-count">0</span>)</button></div></div>
+    <div class="modal-content cart-modal-content"><h2 style="text-align:center; margin-bottom:16px;" data-i18n="review_cart">🛒 Review Your Cart</h2><div id="cart-list-container"><ul id="cart-list" class="cart-list"></ul><p id="cart-empty-msg" class="cart-empty-msg" data-i18n="cart_empty">Your cart is empty.</p></div><div class="modal-actions cart-modal-actions"><button id="cart-cancel-btn" class="btn-cancel" data-i18n="btn_cancel">Cancel</button><button id="cart-download-btn" class="btn-confirm"><span style="font-weight:600;" data-i18n="download_cart">Download Cart</span>(<span id="cart-modal-count">0</span>)</button></div></div>
   </div>
 
   <!-- ✅ UNIFIED GAME DETAIL PANEL - Horizontal: Trailer left, Details+Actions right -->
@@ -1810,14 +1950,16 @@
     #nb-activate-proxy:hover {
       filter: brightness(1.1);
     }
-    /* Theme picker in settings — give Steam-flat treatment */
-    #nb-settings-modal .nb-theme-proxy {
+    /* Theme + Language pickers in settings — give Steam-flat treatment */
+    #nb-settings-modal .nb-theme-proxy,
+    #nb-settings-modal .nb-lang-proxy {
       background: rgba(102,192,244,0.06) !important;
       border: 1px solid rgba(102,192,244,0.18) !important;
       color: var(--st-text) !important;
       border-radius: 3px !important;
     }
-    #nb-settings-modal .nb-theme-proxy:hover {
+    #nb-settings-modal .nb-theme-proxy:hover,
+    #nb-settings-modal .nb-lang-proxy:hover {
       background: rgba(102,192,244,0.18) !important;
       border-color: rgba(102,192,244,0.4) !important;
       color: #fff !important;
@@ -2614,74 +2756,74 @@
   </style>
 
   <!-- Oneshot Install Modal -->
-  <div id="oneshot-install-modal" class="modal" style="display:none;z-index:9999;"><div class="modal-content" style="min-width:320px;max-width:90vw;"><h2>Installing Oneshot Package…</h2><progress id="oneshot-install-progress" value="0" max="100" style="width:100%;height:20px;"></progress><div id="oneshot-install-label" style="margin-top:10px;color:#7cf;font-size:1.08rem;">Preparing…</div></div></div>
+  <div id="oneshot-install-modal" class="modal" style="display:none;z-index:9999;"><div class="modal-content" style="min-width:320px;max-width:90vw;"><h2 data-i18n="installing">Installing Oneshot Package…</h2><progress id="oneshot-install-progress" value="0" max="100" style="width:100%;height:20px;"></progress><div id="oneshot-install-label" style="margin-top:10px;color:#7cf;font-size:1.08rem;" data-i18n="preparing">Preparing…</div></div></div>
 
   <!-- Changelog Modal -->
-  <div id="changelog-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:20000;background:rgba(30,40,55,0.96);align-items:center;justify-content:center;"><div style="max-width:900px;width:90vw;margin:50px auto;background:#222b38;border-radius:10px;box-shadow:0 0 30px #000a;padding:24px 36px;position:relative;"><button id="close-changelog-btn" style="position:absolute;top:16px;right:18px;font-size:20px;background:none;border:none;color:#aaa;cursor:pointer;">&times;</button><h2 style="text-align:center;font-size:1.5em;margin-bottom:12px;color:#fff;">Changelog</h2><div id="changelog-content" style="max-height:540px;overflow:auto;color:#dadada;padding-right:4px;"></div></div></div>
+  <div id="changelog-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:20000;background:rgba(30,40,55,0.96);align-items:center;justify-content:center;"><div style="max-width:900px;width:90vw;margin:50px auto;background:#222b38;border-radius:10px;box-shadow:0 0 30px #000a;padding:24px 36px;position:relative;"><button id="close-changelog-btn" style="position:absolute;top:16px;right:18px;font-size:20px;background:none;border:none;color:#aaa;cursor:pointer;">&times;</button><h2 style="text-align:center;font-size:1.5em;margin-bottom:12px;color:#fff;" data-i18n="changelog">Changelog</h2><div id="changelog-content" style="max-height:540px;overflow:auto;color:#dadada;padding-right:4px;"></div></div></div>
 
   <!-- General Notification Modal -->
   <div id="notification-modal" class="notification-modal" style="display:none;"><div class="notification-content" id="notification-content" style="min-width:320px; text-align:center;"></div></div>
 
   <!-- Parental Control PIN Modal -->
-  <div id="pc-pin-modal" class="modal" role="dialog" aria-modal="true" style="display:none;z-index:20000!important;"><div class="modal-content" style="max-width:420px;"><h2 id="pc-pin-title" style="margin-bottom:8px;">Set Parental PIN</h2><p id="pc-pin-desc" style="opacity:.85;margin-bottom:12px;">Create a 4–8 digit PIN.</p><div id="pc-pin-setup-fields"><label for="pc-pin-input" style="display:block;margin:6px 0 4px;">PIN</label><input id="pc-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /><label for="pc-pin-confirm" style="display:block;margin:12px 0 4px;">Confirm PIN</label><input id="pc-pin-confirm" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /></div><div id="pc-pin-unlock-fields" style="display:none;"><label for="pc-pin-unlock" style="display:block;margin:6px 0 4px;">Enter PIN to turn off</label><input id="pc-pin-unlock" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /></div><p id="pc-pin-error" class="feedback" style="color:#ff6b6b;min-height:20px;margin-top:8px;"></p><div class="modal-actions" style="margin-top:12px;"><button id="pc-pin-ok" class="btn-confirm">OK</button><button id="pc-pin-cancel" class="btn-cancel">Cancel</button></div></div></div>
+  <div id="pc-pin-modal" class="modal" role="dialog" aria-modal="true" style="display:none;z-index:20000!important;"><div class="modal-content" style="max-width:420px;"><h2 id="pc-pin-title" style="margin-bottom:8px;" data-i18n="set_pin">Set Parental PIN</h2><p id="pc-pin-desc" style="opacity:.85;margin-bottom:12px;" data-i18n="create_pin">Create a 4–8 digit PIN.</p><div id="pc-pin-setup-fields"><label for="pc-pin-input" style="display:block;margin:6px 0 4px;" data-i18n="pin_label">PIN</label><input id="pc-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /><label for="pc-pin-confirm" style="display:block;margin:12px 0 4px;" data-i18n="confirm_pin">Confirm PIN</label><input id="pc-pin-confirm" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /></div><div id="pc-pin-unlock-fields" style="display:none;"><label for="pc-pin-unlock" style="display:block;margin:6px 0 4px;" data-i18n="enter_pin">Enter PIN to turn off</label><input id="pc-pin-unlock" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="••••" autocomplete="off" /></div><p id="pc-pin-error" class="feedback" style="color:#ff6b6b;min-height:20px;margin-top:8px;"></p><div class="modal-actions" style="margin-top:12px;"><button id="pc-pin-ok" class="btn-confirm" data-i18n="btn_ok">OK</button><button id="pc-pin-cancel" class="btn-cancel" data-i18n="btn_cancel">Cancel</button></div></div></div>
 
   <!-- Game Actions Modal -->
   <div id="game-actions-modal" class="game-actions-modal" style="display:none;"><div class="modal-content game-actions-content"><button id="game-actions-close" class="game-actions-close" aria-label="Close">&times;</button><div class="game-actions-header"><img id="game-actions-cover" class="game-actions-cover" alt="Game Cover" /><div class="game-actions-info"><h2 id="game-actions-title" class="game-actions-title">Game Title</h2><div id="game-actions-appid" class="game-actions-appid">AppID: 000000</div><div id="game-actions-size" class="game-actions-size">Size: N/A</div><div id="game-actions-downloads" class="game-actions-downloads">Downloads: 0</div></div></div><div class="game-actions-body" id="game-actions-body"></div></div></div>
 
   <!-- Denuvo Warning Modal -->
-  <div id="denuvo-warning-modal" class="modal" role="alertdialog" aria-modal="true" style="display:none;width:auto !important;max-width:95vw !important;padding:0 !important;overflow:hidden !important;max-height:none !important;"><div class="denuvo-warning-content" style="width:auto;max-width:680px;min-width:320px;box-sizing:border-box;max-height:90vh;overflow-y:auto;overflow-x:hidden;"><div class="denuvo-warning-header"><div class="denuvo-warning-icon">⚠️</div><h2 class="denuvo-warning-title">Account Required</h2></div><div class="denuvo-warning-body"><div class="denuvo-warning-message"><p class="denuvo-warning-text-en"><strong>THIS IS DENUVO PROTECTED GAME AND WOULD REQUIRE AN ACCOUNT FROM SELLER FOR ACTIVATION</strong></p><ul class="denuvo-warning-list"><li>You will receive login credentials from the seller</li><li>Account sharing required for activation</li><li>1. Click Enable Auto Update in ShadowPlay+</li><li>2. Close ShadowPlay+</li><li>3. Login to seller account, play until main menu</li><li>4. Logout from seller account and login to your own account to play the game</li></ul></div></div><div class="denuvo-warning-game-info"><img id="denuvo-warning-cover" class="denuvo-warning-cover" src="" alt="Game Cover" /><div class="denuvo-warning-details"><div id="denuvo-warning-game-name" class="denuvo-warning-game-name">Game Name</div><div id="denuvo-warning-tags" class="denuvo-warning-tags"></div></div></div><div class="modal-actions denuvo-warning-actions"><button id="denuvo-warning-cancel" class="btn-cancel">Cancel</button><button id="denuvo-warning-proceed" class="btn-confirm denuvo-warning-proceed-btn">I Understand, Proceed</button></div></div></div>
+  <div id="denuvo-warning-modal" class="modal" role="alertdialog" aria-modal="true" style="display:none;width:auto !important;max-width:95vw !important;padding:0 !important;overflow:hidden !important;max-height:none !important;"><div class="denuvo-warning-content" style="width:auto;max-width:680px;min-width:320px;box-sizing:border-box;max-height:90vh;overflow-y:auto;overflow-x:hidden;"><div class="denuvo-warning-header"><div class="denuvo-warning-icon">⚠️</div><h2 class="denuvo-warning-title">ต้องใช้บัญชี (Account Required)</h2></div><div class="denuvo-warning-body"><div class="denuvo-warning-message"><p class="denuvo-warning-text-en"><strong>เกมนี้ได้รับการป้องกันด้วย DENUVO และจำเป็นต้องใช้บัญชีจากผู้ขายเพื่อเปิดใช้งาน</strong></p><ul class="denuvo-warning-list"><li>คุณจะได้รับข้อมูลเข้าสู่ระบบจากผู้ขาย</li><li>จำเป็นต้องแชร์บัญชีเพื่อเปิดใช้งาน</li><li>1. คลิก Enable Auto Update ใน ShadowPlay+</li><li>2. ปิด ShadowPlay+</li><li>3. เข้าสู่ระบบด้วยบัญชีของผู้ขาย แล้วเล่นจนถึงหน้าเมนูหลัก</li><li>4. ออกจากบัญชีผู้ขาย แล้วเข้าสู่ระบบด้วยบัญชีของคุณเองเพื่อเล่นเกม</li></ul></div></div><div class="denuvo-warning-game-info"><img id="denuvo-warning-cover" class="denuvo-warning-cover" src="" alt="Game Cover" /><div class="denuvo-warning-details"><div id="denuvo-warning-game-name" class="denuvo-warning-game-name">Game Name</div><div id="denuvo-warning-tags" class="denuvo-warning-tags"></div></div></div><div class="modal-actions denuvo-warning-actions"><button id="denuvo-warning-cancel" class="btn-cancel">ยกเลิก</button><button id="denuvo-warning-proceed" class="btn-confirm denuvo-warning-proceed-btn">ฉันเข้าใจแล้ว ดำเนินการต่อ</button></div></div></div>
 
   <!-- Hypervisor Bypass Warning Modal -->
   <div id="hypervisor-warning-modal" class="modal" role="alertdialog" aria-modal="true" style="display:none;width:auto !important;max-width:95vw !important;padding:0 !important;overflow:hidden !important;max-height:none !important;">
     <div class="denuvo-warning-content" style="width:auto;max-width:720px;min-width:320px;box-sizing:border-box;max-height:90vh;overflow-y:auto;overflow-x:hidden;border-top:3px solid #a855f7;">
       <div class="denuvo-warning-header" style="background:linear-gradient(135deg,#3b1f6e,#1e1040);">
         <div class="denuvo-warning-icon">⚙️</div>
-        <h2 class="denuvo-warning-title" style="color:#c084fc;">Hypervisor Bypass Required</h2>
+        <h2 class="denuvo-warning-title" style="color:#c084fc;">ต้องใช้ Hypervisor Bypass</h2>
       </div>
       <div class="denuvo-warning-body">
         <div class="denuvo-warning-message">
-          <p class="denuvo-warning-text-en"><strong style="color:#c084fc;">THIS GAME REQUIRES HYPERVISOR BYPASS — ADVANCED USERS ONLY</strong></p>
+          <p class="denuvo-warning-text-en"><strong style="color:#c084fc;">เกมนี้ต้องใช้ HYPERVISOR BYPASS — สำหรับผู้ใช้ระดับสูงเท่านั้น</strong></p>
 
-          <p style="margin:8px 0 4px;font-size:12px;font-weight:700;color:#e0d0ff;">🖥️ Windows Setup</p>
-          <p style="margin:12px 0 4px;font-size:12px;font-weight:700;color:#e0d0ff;">🎮 In CloudRedirect</p>
+          <p style="margin:8px 0 4px;font-size:12px;font-weight:700;color:#e0d0ff;">🖥️ การตั้งค่า Windows</p>
+          <p style="margin:12px 0 4px;font-size:12px;font-weight:700;color:#e0d0ff;">🎮 ใน CloudRedirect</p>
           <ul class="denuvo-warning-list">
-            <li>Before Downloading game, launch CloudRedirect from Tools section or download from
+            <li>ก่อนดาวน์โหลดเกม ให้เปิด CloudRedirect จากส่วน Tools หรือดาวน์โหลดจาก
             <a href="https://github.com/Selectively11/CloudRedirect/releases/latest" target="_blank" style="color: #c084fc; text-decoration: underline;">CloudRedirect</a></li>
-            <li>Click <strong>Mode</strong> in CloudRedirect, and then click accept</li>
-            <li>Click <strong>Run All Patches</strong>in CloudRedirect</li>
-            <li>Enable  <strong>Manifest Pinning</strong> in CloudRedirect</li>
-            <li>Restart <strong>Steam</strong></li>
-            <li>Download Game in <strong>Steam</strong></li>
+            <li>คลิก <strong>Mode</strong> ใน CloudRedirect แล้วคลิก accept</li>
+            <li>คลิก <strong>Run All Patches</strong> ใน CloudRedirect</li>
+            <li>เปิด <strong>Manifest Pinning</strong> ใน CloudRedirect</li>
+            <li>รีสตาร์ท <strong>Steam</strong></li>
+            <li>ดาวน์โหลดเกมใน <strong>Steam</strong></li>
           </ul>
           <ul class="denuvo-warning-list">
-            <p style="margin:12px 0 4px;font-size:12px;font-weight:700;color:#e0d0ff;">🎮 Bypass Hypervisor Guide</p>
-            <li>Run <strong>VBS.cmd</strong>, choose <strong>1</strong> then <strong>1</strong> to restart PC</li>
-            <li>Download VBS.cmd here <a href="https://cdn.discordapp.com/attachments/1499122656686116944/1503770739722027098/VBS.cmd?ex=6a048f23&is=6a033da3&hm=9eb38d1a5290f8d3c1de70e93f86f03d81aa78c59ade6549d153ef06861783f1&" target="_blank" style="color: #c084fc; text-decoration: underline;">VBS.cmd</a></li>
-            <li>Enable <strong>Virtualization SVM or VT-X</strong> in BIOS settings</li>
-            <li>Turn off <strong>Memory Integrity</strong> in Core Isolation (Windows Security)</li>
-            <li>Turn off Antivirus (real-time protection)</li>
-            <li>May require turning off <strong>Secure Boot</strong> in BIOS</li>
+            <p style="margin:12px 0 4px;font-size:12px;font-weight:700;color:#e0d0ff;">🎮 คู่มือ Bypass Hypervisor</p>
+            <li>รัน <strong>VBS.cmd</strong> เลือก <strong>1</strong> แล้ว <strong>1</strong> เพื่อรีสตาร์ทเครื่อง</li>
+            <li>ดาวน์โหลด VBS.cmd ได้ที่นี่ <a href="https://cdn.discordapp.com/attachments/1499122656686116944/1503770739722027098/VBS.cmd?ex=6a048f23&is=6a033da3&hm=9eb38d1a5290f8d3c1de70e93f86f03d81aa78c59ade6549d153ef06861783f1&" target="_blank" style="color: #c084fc; text-decoration: underline;">VBS.cmd</a></li>
+            <li>เปิด <strong>Virtualization SVM หรือ VT-X</strong> ในการตั้งค่า BIOS</li>
+            <li>ปิด <strong>Memory Integrity</strong> ใน Core Isolation (Windows Security)</li>
+            <li>ปิดโปรแกรมป้องกันไวรัส (real-time protection)</li>
+            <li>อาจต้องปิด <strong>Secure Boot</strong> ใน BIOS</li>
           </ul>
 
-          <p style="margin:12px 0 4px;font-size:12px;font-weight:700;color:#e0d0ff;">🎮 In ShadowPlay+</p>
+          <p style="margin:12px 0 4px;font-size:12px;font-weight:700;color:#e0d0ff;">🎮 ใน ShadowPlay+</p>
           <ul class="denuvo-warning-list">
-            <li>Use <strong>CloudRedirect</strong> inside Tools section, enable <strong>Manifest Pinning</strong></li>
-            <li>Download the game from Steam</li>
-            <li>Click <strong>Bypass Game</strong> in ShadowPlay+</li>
-            <li>Open from ShadowPlay+ → click <strong>PLAY</strong> → choose exe</li>
-            <li>Run game from <strong>HV-PlugNPlay.bat</strong> or <strong>HV-Launcher.bat</strong> or <strong>[GAMENAME].exe</strong></li>
+            <li>ใช้ <strong>CloudRedirect</strong> ในส่วน Tools และเปิด <strong>Manifest Pinning</strong></li>
+            <li>ดาวน์โหลดเกมจาก Steam</li>
+            <li>คลิก <strong>Bypass Game</strong> ใน ShadowPlay+</li>
+            <li>เปิดจาก ShadowPlay+ → คลิก <strong>PLAY</strong> → เลือกไฟล์ exe</li>
+            <li>รันเกมจาก <strong>HV-PlugNPlay.bat</strong> หรือ <strong>HV-Launcher.bat</strong> หรือ <strong>[GAMENAME].exe</strong></li>
           </ul>
 
           <div style="margin-top:14px;padding:10px 14px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);border-radius:8px;">
-            <p style="margin:0;font-size:12px;font-weight:700;color:#f87171;">⚠️ WARNING</p>
-            <p style="margin:4px 0 0;font-size:11.5px;color:#fca5a5;line-height:1.5;">NOT ALL PCs ARE SUPPORTED. SOME GAMES MAY NOT WORK. EXPECT BSOD AS THIS IS VERY EARLY EXPERIMENTAL.</p>
+            <p style="margin:0;font-size:12px;font-weight:700;color:#f87171;">⚠️ คำเตือน</p>
+            <p style="margin:4px 0 0;font-size:11.5px;color:#fca5a5;line-height:1.5;">ไม่ใช่ทุกเครื่องที่รองรับ บางเกมอาจไม่ทำงาน อาจเกิดจอฟ้า (BSOD) ได้ เนื่องจากเป็นฟีเจอร์ทดลองในระยะเริ่มต้น</p>
           </div>
         </div>
       </div>
       <div id="hypervisor-warning-game-name" style="text-align:center;padding:8px 20px;font-size:13px;font-weight:700;color:#c084fc;"></div>
       <div class="modal-actions denuvo-warning-actions">
-        <button id="hypervisor-warning-cancel" class="btn-cancel">Cancel</button>
-        <button id="hypervisor-warning-proceed" class="btn-confirm" style="background:linear-gradient(135deg,#7c3aed,#a855f7);">I Understand, Proceed</button>
+        <button id="hypervisor-warning-cancel" class="btn-cancel">ยกเลิก</button>
+        <button id="hypervisor-warning-proceed" class="btn-confirm" style="background:linear-gradient(135deg,#7c3aed,#a855f7);">ฉันเข้าใจแล้ว ดำเนินการต่อ</button>
       </div>
     </div>
   </div>
@@ -2695,15 +2837,23 @@
   setInterval(function(){
     var l=document.getElementById('theme-active-label');
     if(l&&l.textContent.indexOf('Indigo Galaxy')===-1){
-      l.textContent=l.textContent.replace(/🧧?\s*Chinese New Year/g,'💜 Indigo Galaxy');
+      l.textContent=l.textContent.replace(/🧧?\s*Chinese New Year/g,'💜 Indigo Galaxy').replace(/🧧?\s*Tahun Baru Cina/g,'💜 Indigo Galaxy').replace(/🧧?\s*Tahun Baru Cino/g,'💜 Indigo Galaxy').replace(/🧧?\s*农历新年/g,'💜 Indigo Galaxy');
     }
     if(l&&l.textContent.indexOf('Green Galaxy')>-1){
-      l.textContent=l.textContent.replace(/💚?\s*Green Galaxy/g,'🌙 Green');
+      l.textContent=l.textContent.replace(/💚?\s*Green Galaxy/g,'🌙 Hari Raya');
     }
-    // Also fix the button text directly
-    document.querySelectorAll('.theme-pick-btn[data-theme="hariraya"]').forEach(function(btn){
-      if(btn.textContent.indexOf('Green Galaxy')>-1) btn.textContent='🌙 Green';
-    });
+    if(typeof TRANSLATIONS!=='undefined'){
+      ['th','en','bm','zh','ke'].forEach(function(k){
+        if(TRANSLATIONS[k]){
+          TRANSLATIONS[k].theme_cny='💜 Indigo Galaxy';
+          TRANSLATIONS[k].theme_hariraya='🌙 Hari Raya';
+        }
+      });
+      // Also fix the button text directly
+      document.querySelectorAll('.theme-pick-btn[data-theme="hariraya"]').forEach(function(btn){
+        if(btn.textContent.indexOf('Green Galaxy')>-1) btn.textContent='🌙 Hari Raya';
+      });
+    }
   },300);
   </script>
 
@@ -2712,6 +2862,7 @@
   (function() {
     var ugmHls = null;
     var ugmOpen = false;
+    var _ugmFetchSeq = 0; // bumped each openUnifiedGamePanel — stale fetches check this
     var lbScreenshots = [];
     var lbIndex = 0;
 
@@ -3017,11 +3168,14 @@
         syncUgmVol();
       }
 
-      // Fetch Store API for trailer + details
+      // Fetch Store API for trailer + details.
+      // Capture open-sequence first: if the user closes this panel and opens a
+      // different game before this resolves, the stale callback is discarded.
+      var _localFetchSeq = ++_ugmFetchSeq;
       fetch('/api/steamstore/' + game.appid + '?cc=my&l=en')
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(data) {
-          if (!ugmOpen) return;
+          if (!ugmOpen || _ugmFetchSeq !== _localFetchSeq) return;
           var gd = data && data[String(game.appid)];
           var sg = gd && gd.data;
 
@@ -3159,6 +3313,7 @@
           }
         })
         .catch(function(e) {
+          if (!ugmOpen || _ugmFetchSeq !== _localFetchSeq) return;
           console.error('UGM fetch error:', e);
           if (spinner) spinner.style.display = 'none';
           if (noTrailer) noTrailer.style.display = 'block';
@@ -4221,7 +4376,7 @@
           '<div style="padding:16px 20px;line-height:1.5;">',
             '<ul style="margin:0 0 12px 18px;padding:0;font-size:13px;color:#a9b8d9;">',
               '<li>Clear Steam download cache &amp; temp files</li>',
-              '<li>Reinitialize ShadowPlay+ registry</li>',
+              '<li>Reinitialize ShadowPlay unlocker registry</li>',
               '<li>Restart Steam automatically</li>',
             '</ul>',
             '<div id="__ccc-status" style="font-size:13px;color:#66C0F4;min-height:18px;"></div>',
@@ -4711,8 +4866,9 @@
     if (nbZOut) nbZOut.addEventListener('click', function() { var r = document.getElementById('zoom-out'); if(r) r.click(); });
 
     // Theme — these buttons have theme-pick-btn class so script.js wires them automatically
-    // Close the settings modal after click
-    document.querySelectorAll('.nb-theme-proxy').forEach(function(b) {
+    // Language — these buttons have lang-pick-btn class so script.js wires them automatically
+    // Both close the settings modal after click
+    document.querySelectorAll('.nb-theme-proxy, .nb-lang-proxy').forEach(function(b) {
       b.addEventListener('click', function() { setTimeout(closeSettings, 150); });
     });
 
@@ -4849,7 +5005,7 @@
               uHost.dataset.loaded = '1';
               var uScript = document.createElement('script');
               uScript.src = 'https://utteranc.es/client.js';
-              uScript.setAttribute('repo', '3circledesign/onennabe-chat');
+              uScript.setAttribute('repo', 'barryhamsy/Shadow-Play');
               uScript.setAttribute('issue-term', 'pathname');
               uScript.setAttribute('label', 'Community Chat');
               uScript.setAttribute('theme', 'photon-dark');
@@ -4901,7 +5057,9 @@
   <!-- ── FEATURED SECTION: thumbnail populator + prev/next wiring ── -->
   <script>
   (function() {
-    var _thumbAppid = null;
+    var _thumbAppid    = null;
+    var _loadThumbsSeq = 0;    // guards stale loadThumbs fetches
+    var _thumbsAbort   = null; // AbortController for the in-flight thumb fetch
 
     window.addEventListener('load', function() {
       var hiddenNext = document.getElementById('one-featured-next');
@@ -4916,23 +5074,55 @@
       if (!imgEl) { setTimeout(watchFeatured, 300); return; }
       new MutationObserver(function() {
         var src = imgEl.src || '';
-        var m   = src.match(/steam\/apps\/(\d+)\//);
+        var m = src.match(/steam\/apps\/(\d+)\//) ||
+                src.match(/\/api\/sgdb\/[^\/]+\/(\d+)/) ||
+                src.match(/\/cache(?:d)?_images?\/(\d+)/);
         if (m && m[1] !== _thumbAppid) { _thumbAppid = m[1]; loadThumbs(_thumbAppid); }
       }).observe(imgEl, { attributes: true, attributeFilter: ['src'] });
+      // Direct entry-point so _load() can trigger thumbs immediately for the
+      // new game without depending on the image-src URL pattern.
+      window.__loadThumbsForGame = function(appid) {
+        var id = String(appid);
+        _thumbAppid = id;
+        loadThumbs(id);
+      };
+      // Blank the 4 thumb cells + screenshot img instantly on game change so
+      // the previous game's covers/screenshots never linger during the fetch.
+      window.__clearThumbs = function() {
+        for (var _i = 0; _i < 4; _i++) {
+          var _c = document.getElementById('one-thumb-' + _i);
+          if (_c) _c.innerHTML = '<div class="one-thumb-placeholder"></div>';
+        }
+        var _si = document.getElementById('one-screenshot-img');
+        if (_si) _si.removeAttribute('src');
+      };
       var src = imgEl.src || '';
-      var m   = src.match(/steam\/apps\/(\d+)\//);
+      var m = src.match(/steam\/apps\/(\d+)\//) ||
+              src.match(/\/api\/sgdb\/[^\/]+\/(\d+)/) ||
+              src.match(/\/cache(?:d)?_images?\/(\d+)/);
       if (m) { _thumbAppid = m[1]; loadThumbs(_thumbAppid); }
     }
 
     function loadThumbs(appid) {
-      fetch('/api/steamstore/' + appid + '?cc=us&l=en')
+      // Abort any prior in-flight thumb fetch so it can't land late and
+      // overwrite the current game's thumbnails with stale screenshots.
+      if (_thumbsAbort) { try { _thumbsAbort.abort(); } catch(e){} }
+      _thumbsAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      var ctrl = _thumbsAbort, seq = ++_loadThumbsSeq;
+      var opts = ctrl ? { signal: ctrl.signal } : {};
+      fetch('/api/steamstore/' + appid + '?cc=us&l=en', opts)
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(data) {
-          if (!data) return;
+          if (seq !== _loadThumbsSeq) return; // navigated away — discard
+          if (!data) { fillThumbs([], appid); return; }
           var sg = data[String(appid)] && data[String(appid)].data;
           if (!sg || !sg.screenshots) { fillThumbs([], appid); return; }
           fillThumbs(sg.screenshots.map(function(s){ return s.path_thumbnail || s.path_full; }), appid);
-        }).catch(function() { fillThumbs([], appid); });
+        }).catch(function(e) {
+          if (seq !== _loadThumbsSeq) return;
+          if (e && e.name === 'AbortError') return;
+          fillThumbs([], appid);
+        });
     }
 
     function fillThumbs(shots, appid) {
@@ -5014,7 +5204,7 @@
              price and chips don't wait for the next watchdog tick */
           document.querySelectorAll('#game-grid .card[data-appid]').forEach(function(card){
             var id = card.getAttribute('data-appid');
-            if(id && SC[id] === undefined) fetchGame(id);
+            if(id && SC[id] === undefined) scheduleFetchGame(id);
           });
         })
         .catch(function(e){ console.warn('[steam-list] /api/games failed:', e); });
@@ -5073,64 +5263,93 @@
 
     /* image loader */
     function attachImg(wrap, _unused, appid){
-      /* Strategy: CDN-first for instant display (no API wait), then fetchGame()
-         will call correctThumbFromApi() once the store data arrives to silently
-         swap in the accurate header_image URL if the CDN served the wrong one. */
-      wrap._slAppid = appid;  /* tag so correctThumbFromApi can find this wrap */
+      wrap._slAppid = appid;
 
-      /* If API data is already cached, use it immediately — no CDN roundtrip */
+      /* Reuse the SAME image chain the library sidebar icons use. Steam CDN
+         header.jpg (460x215, fits the 200x92 card) loads reliably here; SGDB
+         was coming back blank because it's unreachable / rate-limited from this
+         app. Order: Steam CDN → legacy CDN → local cache → SGDB → (last)
+         Steam-API header/capsule/screenshot via correctThumbFromApi. */
       if(SC[appid] && SC[appid] !== null){
         correctThumbFromApi(wrap, SC[appid]);
         return;
       }
 
       var urls = [
-        'https://steamcdn-a.akamaihd.net/steam/apps/' + appid + '/header.jpg',
-        'https://cdn.akamai.steamstatic.com/steam/apps/' + appid + '/header.jpg',
         'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/' + appid + '/header.jpg',
-        'https://steamcdn-a.akamaihd.net/steam/apps/' + appid + '/capsule_616x353.jpg'
+        'https://steamcdn-a.akamaihd.net/steam/apps/' + appid + '/header.jpg',
+        '/cache_images/' + appid + '.jpg',
+        '/api/sgdb/header/' + appid
       ];
+
       var idx = 0;
-      function applyBg(url, center){
+      function applyBg(url){
         wrap.style.setProperty('background-image', 'url("' + url + '")', 'important');
         wrap.style.setProperty('background-size', 'cover', 'important');
-        wrap.style.setProperty('background-position', center ? 'center' : 'center top', 'important');
+        wrap.style.setProperty('background-position', 'center', 'important');
         wrap.classList.add('loaded');
-        wrap._slCdnUrl = url; /* remember what CDN gave us for comparison later */
+        wrap._slCdnUrl = url;
       }
       function tryNext(){
-        if(idx >= urls.length){ tryScreenshotBg(wrap, appid); return; }
+        if(idx >= urls.length){
+          if (SC[appid] && SC[appid] !== null && SC[appid] !== false) {
+            correctThumbFromApi(wrap, SC[appid]);
+          } else {
+            wrap.style.background = '#0d1520';
+            wrap.classList.add('loaded');
+          }
+          return;
+        }
         var probe = new Image();
         var u = urls[idx++];
-        probe.onload  = function(){ applyBg(u, false); };
+        probe.onload  = function(){ applyBg(u); };
         probe.onerror = function(){ tryNext(); };
         probe.src = u;
       }
       tryNext();
     }
 
-    /* Called by fetchGame() after API data arrives — corrects any wrong CDN image */
+    /* Ultimate Fallback — Extracts guaranteed images/screenshots from Steam API data */
     function correctThumbFromApi(wrap, sd){
-      if(!sd || !wrap) return;
-      /* Build priority list: header_image > capsule_imagev5 > capsule_image */
+      if(!wrap) return;
+      if(!sd) {
+         wrap.classList.add('loaded');
+         return;
+      }
+
+      /* Priority: header -> capsule v5 -> capsule -> first screenshot */
       var candidates = [];
       if(sd.header_image)    candidates.push(sd.header_image);
       if(sd.capsule_imagev5) candidates.push(sd.capsule_imagev5);
       if(sd.capsule_image)   candidates.push(sd.capsule_image);
-      if(!candidates.length) return;
+      if(sd.screenshots && sd.screenshots.length) {
+          candidates.push(sd.screenshots[0].path_thumbnail || sd.screenshots[0].path_full);
+      }
+
+      if(!candidates.length) {
+          wrap.classList.add('loaded');
+          return;
+      }
 
       var ci = 0;
       function tryNext(){
-        if(ci >= candidates.length) return;
+        if(ci >= candidates.length) {
+            wrap.style.setProperty('background-image', 'url("/static/placeholder.jpg")', 'important');
+            wrap.classList.add('loaded');
+            return;
+        }
         var url = candidates[ci++];
-        /* Skip if CDN already served this exact URL */
-        if(wrap._slCdnUrl && wrap._slCdnUrl === url){ return; }
+        if(wrap._slCdnUrl && wrap._slCdnUrl === url){
+            wrap.classList.add('loaded');
+            return;
+        }
         var p = new Image();
         p.onload = function(){
           wrap.style.setProperty('background-image', 'url("' + url + '")', 'important');
           wrap.style.setProperty('background-size', 'cover', 'important');
-          wrap.style.setProperty('background-position', 'center top', 'important');
+          wrap.style.setProperty('background-position', 'center', 'important');
           wrap.classList.add('loaded');
+          wrap._slCdnUrl = url;
         };
         p.onerror = function(){ tryNext(); };
         p.src = url;
@@ -5422,9 +5641,39 @@
           if(sd){
             var tw = card && card.querySelector('.sl-thumb-wrap');
             if(tw) correctThumbFromApi(tw, sd);
+          } else {
+             /* Force remove spinner if API returns empty data */
+             var tw2 = card && card.querySelector('.sl-thumb-wrap');
+             if(tw2) tw2.classList.add('loaded');
           }
         })
-        .catch(function(){ SC[appid] = false; });
+        .catch(function(){
+            SC[appid] = false;
+            /* Force remove spinner if API request fails entirely */
+            var card = document.querySelector('#game-grid .card[data-appid="'+appid+'"]');
+            var tw = card && card.querySelector('.sl-thumb-wrap');
+            if (tw) tw.classList.add('loaded');
+        });
+    }
+
+    /* Debounce store-API fetches during pagination. Rapid page changes would
+       otherwise fire a /api/steamstore/ call per card per page — a burst that
+       gets the IP rate-limited by Steam (which also breaks CDN images). Cached
+       cards fill instantly (no network); only NEW fetches wait ~350ms for the
+       user to settle, and we skip any card that's been paged out of the DOM. */
+    var _ssDebTimer = null, _ssDebPending = {};
+    function scheduleFetchGame(appid){
+      if(SC[appid] !== undefined){ fetchGame(appid); return; } /* cached → immediate, no network */
+      _ssDebPending[appid] = true;
+      if(_ssDebTimer) clearTimeout(_ssDebTimer);
+      _ssDebTimer = setTimeout(function(){
+        var ids = Object.keys(_ssDebPending); _ssDebPending = {};
+        ids.forEach(function(id){
+          if(SC[id] !== undefined) return;
+          /* only fetch cards still visible (user may have paged away) */
+          if(document.querySelector('#game-grid .card[data-appid="'+id+'"]')) fetchGame(id);
+        });
+      }, 350);
     }
 
     function ensureWrap(){
@@ -5552,7 +5801,7 @@
       ensureWrap();
       injectSteamDBBtn();
       var cards = Array.from(document.querySelectorAll('#game-grid .card[data-appid]'));
-      var filterIds = ['filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
+      var filterIds = ['filter-membership','filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
       var anyFilterActive = filterIds.some(function(id){ var el=document.getElementById(id); return el&&el.classList.contains('active'); });
       var searchVal = ((document.getElementById('search')||{}).value||'').trim();
       var limit = (anyFilterActive || searchVal) ? cards.length : PER;
@@ -5570,7 +5819,7 @@
         else if(card.dataset.slBuilt === 'pending' && allG(appid)){
           buildCard(card, appid);
         }
-        fetchGame(appid);
+        scheduleFetchGame(appid);
         if(!card._slEv){
           card._slEv = true;
           card.addEventListener('mouseenter', function(){
@@ -5591,7 +5840,7 @@
 
     /* ── WATCHDOG ── runs every 800ms to repair anything main.js disrupts */
     function watchdog(){
-      var filterIds = ['filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
+      var filterIds = ['filter-membership','filter-top-downloads','filter-online','filter-bypass','filter-hypervisor'];
       var anyFilterActive = filterIds.some(function(id){ var el=document.getElementById(id); return el&&el.classList.contains('active'); });
       var searchVal = ((document.getElementById('search')||{}).value||'').trim();
       var wdLimit = (anyFilterActive || searchVal) ? 99999 : PER;
@@ -6181,7 +6430,45 @@
 
     var SHELL_INJECTED = false;
     var CURRENT = null;
-    var LIB_INSTALLED_CACHE = {};
+    var CACHE_KEY = 'oneb:acf_cache:v2';
+
+    function _loadAcfCache() {
+      try {
+        var raw = localStorage.getItem(CACHE_KEY);
+        if (!raw) return {};
+        var parsed = JSON.parse(raw);
+        // Strip the metadata key before returning
+        var result = {};
+        for (var k in parsed) {
+          if (k !== '_savedAt') result[k] = !!parsed[k];
+        }
+        return result;
+      } catch(e) { return {}; }
+    }
+
+    function saveAcfCache() {
+      try {
+        var toSave = {};
+        for (var k in LIB_INSTALLED_CACHE) {
+          toSave[k] = LIB_INSTALLED_CACHE[k];
+        }
+        toSave._savedAt = Date.now();
+        localStorage.setItem(CACHE_KEY, JSON.stringify(toSave));
+      } catch(e) { /* localStorage may be full — ignore */ }
+    }
+
+    /* Use this everywhere instead of LIB_INSTALLED_CACHE[id] = value */
+    function setAcfCache(id, value) {
+      id = String(id);
+      LIB_INSTALLED_CACHE[id] = !!value;
+      // Debounced save: batch rapid updates into one write
+      clearTimeout(setAcfCache._t);
+      setAcfCache._t = setTimeout(saveAcfCache, 300);
+    }
+
+    // Pre-populate from last session immediately (before any fetch)
+    var LIB_INSTALLED_CACHE = _loadAcfCache();
+
     var LIB_FILTERS = { features: {}, genres: {} };
 
     function getGames(){
@@ -6473,39 +6760,60 @@
         h.addEventListener('click', function(){ h.parentElement.classList.toggle('collapsed'); });
       });
 
-      // 3. Request actual install statuses to dynamically update the rows to White/Bold
-      var visibleAppids = games.map(function(g){ return String(g.appid); });
-      if (visibleAppids.length > 0) {
-          /* Check each visible game's actual ACF StateFlags via bulk acf_status calls.
-             We batch in groups of 10 to avoid hammering the backend.
-             Only StateFlags & 4 == 4 counts as truly installed (not mid-download). */
-          var appidsToCheck = games.map(function(g){ return String(g.appid); });
+      // ── ACF CACHE WARM-UP ──────────────────────────────────────────────────
+      // Fires immediately when library opens. 8 parallel requests, no delays.
+      // Updates LIB_INSTALLED_CACHE (and localStorage) silently in background.
+      // The filter button never waits for this — it renders from whatever is
+      // already in the cache (pre-loaded from localStorage at startup).
+      if (!window._warmAcfCacheRunning) {
+        window._warmAcfCache = function(gamesList) {
+          if (window._warmAcfCacheRunning) return; // only one run per session
+          // Re-check ALL games (not just undefined ones) so we catch changes
+          // that happened between app sessions (uninstalls done outside the app)
+          var appids = gamesList.map(function(g){ return String(g.appid); });
+          if (!appids.length) return;
 
-          function checkAcfBatch(ids){
-            ids.forEach(function(id){
-              fetch('/api/acf_status/' + id + '?t=' + Date.now(), {cache:'no-store'})
-                .then(function(r){ return r.ok ? r.json() : null; })
-                .catch(function(){ return null; })
-                .then(function(s){
-                  /* status='installed' only when (StateFlags & 4) == 4 */
-                  var fullyInstalled = !!(s && s.status === 'installed');
-                  LIB_INSTALLED_CACHE[id] = fullyInstalled;
-                  var row = document.querySelector('.lib-row[data-appid="'+id+'"]');
-                  if(row){
-                    if(fullyInstalled) row.classList.add('is-installed');
-                    else               row.classList.remove('is-installed');
-                  }
-                });
-            });
-          }
+          window._warmAcfCacheRunning = true;
+          var CONCURRENCY = 8;
+          var index = 0;
+          var active = 0;
+          var done = 0;
+          var total = appids.length;
 
-          /* Stagger batches so we don't fire 50 requests at once */
-          var batchSize = 8;
-          for(var bi = 0; bi < appidsToCheck.length; bi += batchSize){
-            (function(batch, delay){
-              setTimeout(function(){ checkAcfBatch(batch); }, delay);
-            })(appidsToCheck.slice(bi, bi + batchSize), Math.floor(bi / batchSize) * 400);
+          function runNext() {
+            // Drain the queue: fire as many as concurrency allows
+            while (active < CONCURRENCY && index < total) {
+              (function(id) {
+                active++;
+                fetch('/api/acf_status/' + id + '?t=' + Date.now(), {cache:'no-store'})
+                  .then(function(r){ return r.ok ? r.json() : null; })
+                  .catch(function(){ return null; })
+                  .then(function(s){
+                    active--;
+                    done++;
+                    var installed = !!(s && s.status === 'installed');
+                    setAcfCache(id, installed);
+                    // Update green dot on any visible row immediately
+                    var row = document.querySelector('.lib-row[data-appid="'+id+'"]');
+                    if (row) {
+                      if (installed) row.classList.add('is-installed');
+                      else           row.classList.remove('is-installed');
+                    }
+                    if (done === total) {
+                      window._warmAcfCacheRunning = false; // allow future re-run if needed
+                    } else {
+                      runNext(); // pick up next item as soon as a slot frees
+                    }
+                  });
+              })(appids[index++]);
+            }
           }
+          runNext(); // kick off immediately — no setTimeout delays
+        };
+
+        // Run immediately with current library games
+        var _warmGames = getLibraryGames();
+        if (_warmGames.length) window._warmAcfCache(_warmGames);
       }
     }
 
@@ -6571,10 +6879,11 @@
          Quality order: library_hero (any host) > capsule_616x353 > header_image > screenshot */
       var hero = document.getElementById('lib-hero');
       var _heroUrls = [
+        /* Prefer Steam's store_item_assets hero art. */
+        'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/' + appid + '/library_hero.jpg',
         /* library_hero on all 3 CDN hosts */
         'https://steamcdn-a.akamaihd.net/steam/apps/'                        + appid + '/library_hero.jpg',
         'https://cdn.akamai.steamstatic.com/steam/apps/'                      + appid + '/library_hero.jpg',
-        'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/' + appid + '/library_hero.jpg',
         /* high-quality capsule as a decent-looking fallback */
         'https://cdn.akamai.steamstatic.com/steam/apps/'                      + appid + '/capsule_616x353.jpg',
         'https://steamcdn-a.akamaihd.net/steam/apps/'                        + appid + '/capsule_616x353.jpg'
@@ -6594,21 +6903,30 @@
                             capsule_imagev5 / capsule_image (square cover art) >
                             header_image (low-res 460x215, last resort before screenshot) */
               var candidates = [];
-              if(sd && sd.background_raw)  candidates.push(sd.background_raw);
+               if(sd && sd.library_hero_hashed && sd.library_hero_hashed.indexOf('store_item_assets') !== -1) candidates.push(sd.library_hero_hashed);
+               if(sd && sd.library_hero && sd.library_hero.indexOf('store_item_assets') !== -1) candidates.push(sd.library_hero);
+               if(sd) candidates.push('https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/' + appid + '/library_hero.jpg');
+               if(sd && sd.background_raw)  candidates.push(sd.background_raw);
               if(sd && sd.background)      candidates.push(sd.background);
               if(sd && sd.capsule_imagev5) candidates.push(sd.capsule_imagev5);
               if(sd && sd.capsule_image)   candidates.push(sd.capsule_image);
               if(sd && sd.header_image)    candidates.push(sd.header_image);
               if(sd && sd.screenshots && sd.screenshots.length)
                 candidates.push(sd.screenshots[0].path_full || sd.screenshots[0].path_thumbnail);
+               candidates.push('/api/sgdb/hero/' + encodeURIComponent(appid));
               function tryApi(i){
+                if(!document.body.classList.contains('lib-mode-active')) return;
                 if(i >= candidates.length) return;
                 var p = new Image();
                 p.onload = function(){
+                  if(!document.body.classList.contains('lib-mode-active')) return;
                   var h = document.getElementById('lib-hero');
                   if(h) h.style.backgroundImage = 'url("' + candidates[i] + '")';
                 };
-                p.onerror = function(){ tryApi(i + 1); };
+                p.onerror = function(){
+                  if(!document.body.classList.contains('lib-mode-active')) return;
+                  tryApi(i + 1);
+                };
                 p.src = candidates[i];
               }
               tryApi(0);
@@ -6617,10 +6935,14 @@
         }
         var p = new Image();
         p.onload = function(){
+          if(!document.body.classList.contains('lib-mode-active')) return;
           var h = document.getElementById('lib-hero');
           if(h) h.style.backgroundImage = 'url("' + urls[idx] + '")';
         };
-        p.onerror = function(){ tryHeroUrls(urls, idx + 1); };
+        p.onerror = function(){
+          if(!document.body.classList.contains('lib-mode-active')) return;
+          tryHeroUrls(urls, idx + 1);
+        };
         p.src = urls[idx];
       }
       tryHeroUrls(_heroUrls, 0);
@@ -6628,11 +6950,40 @@
       /* hero logo */
       var logoEl = document.getElementById('lib-hero-logo-img');
       var logoProbe = new Image();
+      var logoCandidates = [];
+      var logoCandidateIndex = 0;
+
+      function tryNextLogo(){
+        if(!document.body.classList.contains('lib-mode-active')) return;
+        if(logoCandidateIndex >= logoCandidates.length){
+          hero.classList.add('no-logo');
+          return;
+        }
+        logoProbe.src = logoCandidates[logoCandidateIndex++];
+      }
+
       logoProbe.onload = function(){
-        logoEl.src = heroLogo(appid);
+        if(!document.body.classList.contains('lib-mode-active')) return;
+        logoEl.src = logoProbe.src; // Use whichever URL succeeded
         hero.classList.remove('no-logo');
       };
-      logoProbe.src = heroLogo(appid);
+
+      logoProbe.onerror = function(){
+        if(!document.body.classList.contains('lib-mode-active')) return;
+        tryNextLogo();
+      };
+
+      fetch('/api/steamstore/' + encodeURIComponent(appid) + '?cc=my&l=en', {cache:'force-cache'})
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .catch(function(){ return null; })
+        .then(function(data){
+          var sd = data && data[String(appid)] && data[String(appid)].data;
+          var hashedLogo = sd && (sd.logo_hashed || sd.logo);
+          if(hashedLogo && hashedLogo.indexOf('store_item_assets') !== -1) logoCandidates.push(hashedLogo);
+          logoCandidates.push('https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/' + encodeURIComponent(appid) + '/logo.png');
+          logoCandidates.push('/api/sgdb/logo/' + encodeURIComponent(appid));
+          tryNextLogo();
+        });
 
       /* Build the split PLAY/INSTALL button + dropdown */
       buildPlayDropdown(g, appid);
@@ -6645,6 +6996,7 @@
         .then(function(r){return r.ok ? r.json() : null;})
         .catch(function(){return null;})
         .then(function(data){
+          if(!document.body.classList.contains('lib-mode-active')) return;
           var sd = (data && data[String(appid)] && data[String(appid)].data) || null;
 
           if(sd) {
@@ -6820,8 +7172,8 @@
                   if(nowInstalled) row.classList.add('is-installed');
                   else             row.classList.remove('is-installed');
                 }
-                if(nowInstalled) LIB_INSTALLED_CACHE[String(appid)] = true;
-                else             delete LIB_INSTALLED_CACHE[String(appid)];
+                if(nowInstalled) setAcfCache(String(appid), true);
+                else             setAcfCache(String(appid), false);
                 buildPlayDropdown(game, appid);
                 console.log('[lib] status flipped for', appid, '→', nowInstalled ? 'installed' : 'not installed');
               } else if(attempts >= maxAttempts){
@@ -6858,13 +7210,49 @@
       /* ── DECIDE STATE ──
          IMPORTANT: /api/launcher_status returns `installed=true` ONLY when the
          launcher patch (unsteam.dll) is present — NOT when the Steam .acf is.
-         For the true Steam-install check we must hit /api/acf_status separately. */
+         For the true Steam-install check we must hit /api/acf_status separately.
+         NOTE: acf_status can be slow when the server is busy (e.g. loading images).
+         We race it against a 10-second timeout so the button never hangs on LOADING. */
+      function fetchWithTimeout(url, opts, ms) {
+        var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        var timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, ms) : null;
+        var fetchOpts = ctrl ? Object.assign({}, opts, { signal: ctrl.signal }) : opts;
+        return fetch(url, fetchOpts)
+          .then(function(r){ if(timer) clearTimeout(timer); return r; })
+          .catch(function(e){ if(timer) clearTimeout(timer); return null; });
+      }
+
       Promise.all([
         fetch('/api/launcher_status/' + appid).then(function(r){return r.ok?r.json():{};}).catch(function(){return {};}),
-        fetch('/api/acf_status/' + appid + '?t=' + Date.now(), {cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;})
+        fetchWithTimeout('/api/acf_status/' + appid + '?t=' + Date.now(), {cache:'no-store'}, 10000)
+          .then(function(r){ return (r && r.ok) ? r.json() : null; })
+          .catch(function(){ return null; })
       ]).then(function(results){
         var status    = results[0] || {};
         var acfStatus = results[1] || null;
+
+        /* If acf_status timed out (acfStatus===null) and launcher_status also
+           gives no clear installed signal, schedule a silent background retry
+           so the button updates once the server is less busy. */
+        var _acfTimedOut = (acfStatus === null);
+        if (_acfTimedOut && !status.json_manifest_exists) {
+          setTimeout(function(){
+            if (!document.body.classList.contains('lib-mode-active')) return; // user left library
+            fetchWithTimeout('/api/acf_status/' + appid + '?t=' + Date.now(), {cache:'no-store'}, 12000)
+              .then(function(r){ return (r && r.ok) ? r.json() : null; })
+              .catch(function(){ return null; })
+              .then(function(retryAcf){
+                if (!retryAcf) return; // still not available, give up
+                var nowInstalled = !!(retryAcf && retryAcf.status === 'installed');
+                if (nowInstalled) {
+                  setAcfCache(String(appid), true);
+                  var row = document.querySelector('.lib-row[data-appid="'+appid+'"]');
+                  if(row) row.classList.add('is-installed');
+                  buildPlayDropdown(game, appid);
+                }
+              });
+          }, 5000); // retry 5s after the timeout
+        }
 
         /* isAcfInstalled = ACF exists AND StateFlags bit 2 (value 4) is set.
            Backend returns status='installed' only when (StateFlags & 4) == 4.
@@ -6910,7 +7298,7 @@
             .then(function(r) { return r.json(); })
             .then(function(res){
                if(res.success) {
-                   delete LIB_INSTALLED_CACHE[String(appid)];
+                   setAcfCache(String(appid), false);
                    var row = document.querySelector('.lib-row[data-appid="'+appid+'"]');
                    if(row) row.classList.remove('is-installed');
                    buildPlayDropdown(game, appid);
@@ -6929,7 +7317,7 @@
             wrap.classList.add('state-loading');
             fetch('/api/uninstall/' + appid, { method: 'POST' })
             .then(function(){
-               delete LIB_INSTALLED_CACHE[String(appid)];
+               setAcfCache(String(appid), false);
                var row = document.querySelector('.lib-row[data-appid="'+appid+'"]');
                if(row) row.classList.remove('is-installed');
                buildPlayDropdown(game, appid);
@@ -6969,7 +7357,7 @@
                     window._suppressUGM = false;
 
                     // Mark as installed instantly
-                    LIB_INSTALLED_CACHE[String(appid)] = true;
+                    setAcfCache(String(appid), true);
                     var row = document.querySelector('.lib-row[data-appid="'+appid+'"]');
                     if(row) row.classList.add('is-installed');
                     buildPlayDropdown(game, appid);
